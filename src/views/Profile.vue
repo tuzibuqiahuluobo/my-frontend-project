@@ -149,7 +149,7 @@ const savePassword = () => {
           </el-form-item>
           
           <el-form-item label="用户名">
-            <el-input v-model="editUsername" placeholder="请输入新的用户名" clearable>
+            <el-input v-model="editUsername" placeholder="请输入新的用户名" clearable @keyup.enter="saveUsername">
               <template #append>
                 <el-button type="primary" :loading="saving" @click="saveUsername">保存修改</el-button>
               </template>
@@ -157,7 +157,7 @@ const savePassword = () => {
           </el-form-item>
 
           <el-form-item label="新密码">
-            <el-input v-model="editPassword" type="password" placeholder="若不修改请留空" show-password clearable>
+            <el-input v-model="editPassword" type="password" placeholder="若不修改请留空" show-password clearable @keyup.enter="savePassword">
                 <template #append>
                     <el-button type="danger" :loading="saving" @click="savePassword">修改密码</el-button>
                 </template>

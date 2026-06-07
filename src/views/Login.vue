@@ -69,6 +69,7 @@ const submitForm = async () => {
         clearable 
         size="large"
         style="margin-bottom: 20px;"
+        @keyup.enter="submitForm"
       />
       
       <el-input 
@@ -78,6 +79,7 @@ const submitForm = async () => {
         show-password 
         size="large"
         style="margin-bottom: 25px;"
+        @keyup.enter="submitForm"
       />
 
       <el-button 
