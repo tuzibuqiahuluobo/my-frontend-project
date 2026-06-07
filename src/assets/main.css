@@ -1,0 +1,17 @@
+/* 彻底清除浏览器和 Vue 自带的内外边距 */
+html,
+body,
+#app {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', '微软雅黑', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* 确保所有盒模型计算包含边框，防止宽度溢出 */
+* {
+  box-sizing: border-box;
+}
