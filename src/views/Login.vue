@@ -9,6 +9,13 @@ const username = ref('')
 const password = ref('')
 const loading = ref(false) // 增加一个加载状态，点击时按钮会转圈
 
+// 控制是否进入指挥官暗黑模式
+const isAdminMode = ref(false)
+
+// 连点触发器逻辑
+const clickCount = ref(0)
+let clickTimer = null
+
 // 新增注册专用的变量
 const email = ref('')
 const code = ref('')
@@ -59,6 +66,33 @@ const sendCode = async () => {
     countdown.value = 0
     clearInterval(timer)
   }
+}
+
+const triggerSecretChannel = () => {
+  clickCount.value++
+  // 如果 1 秒内连续点击 10 次
+  if (clickCount.value >= 10) {
+    isAdminMode.value = true
+    isLoginMode.value = true // 强制切回登录状态
+    clickCount.value = 0
+    ElMessage({
+      message: '👁️识别到隐藏指令，超级管理员通道已开启',
+      type: 'success',
+      duration: 3000
+    })
+  }
+  // 每次点击重置定时器，超过 1 秒没连点就清零
+  clearTimeout(clickTimer)
+  clickTimer = setTimeout(() => {
+    clickCount.value = 0
+  }, 1000)
+}
+
+// 退出管理员模式
+const exitAdminMode = () => {
+  isAdminMode.value = false
+  username.value = ''
+  password.value = ''
 }
 
 const submitForm = async () => {
@@ -113,82 +147,89 @@ const submitForm = async () => {
 <template>
   <div style="width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);">    
   
-    <el-card style="width: 400px; border-radius: 15px;" shadow="hover">
+    <el-card shadow="hover" :style="{ 
+      width: '400px', borderRadius: '15px', border: 'none', transition: 'all 0.5s',
+      background: isAdminMode ? 'rgba(30, 30, 30, 0.9)' : 'rgba(255, 255, 255, 0.95)',
+      boxShadow: isAdminMode ? '0 8px 32px rgba(255, 0, 0, 0.15)' : '0 8px 32px rgba(0, 0, 0, 0.1)'
+    }">
       
-      <div style="text-align: center; margin-bottom: 30px;">
-        <h2 style="color: #409EFF; margin: 0;">{{ isLoginMode ? '欢迎回来 👋' : '注册专属账号 🚀' }}</h2>
-        <p style="color: #909399; font-size: 14px; margin-top: 10px;">开启你的全栈开发之旅</p>
+      <div style="text-align: center; margin-bottom: 30px; user-select: none;">
+        <h2 
+          @click="triggerSecretChannel" 
+          :style="{ color: isAdminMode ? '#F56C6C' : '#409eff', cursor: 'pointer', transition: 'color 0.3s' }"
+        >
+          {{ isAdminMode ? '⚠️ 超级管理员通道' : '欢迎回来 👋' }}
+        </h2>
+        <p :style="{ color: isAdminMode ? '#909399' : '#909399', fontSize: '14px' }">
+          {{ isAdminMode ? '进入超级管理员后台' : (isLoginMode ? '开启你的全栈开发之旅' : '注册一个新账号') }}
+        </p>
       </div>
 
       <el-input 
         v-model="username" 
-        placeholder="请输入用户名" 
+        :placeholder="isAdminMode ? '请输入管理员账号' : '请输入用户名'" 
         clearable 
         size="large"
         style="margin-bottom: 20px;"
         @keyup.enter="submitForm"
-      />
+      >
+        <template #prefix><el-icon><User /></el-icon></template>
+      </el-input>
       
       <el-input 
         v-model="password" 
         type="password" 
-        placeholder="请输入密码" 
+        :placeholder="isAdminMode ? '请输入管理员密码' : '请输入密码'" 
         show-password 
         size="large"
         style="margin-bottom: 25px;"
         @keyup.enter="submitForm"
-      />
-
-      <el-input 
-        v-model="email" 
-        placeholder="请输入 QQ 或 Gmail 邮箱" 
-        clearable 
-        size="large"
-        style="margin-bottom: 20px;"
-        @keyup.enter="submitForm"
       >
-        <template #prefix>
-          <el-icon><Message /></el-icon>
-        </template>
+        <template #prefix><el-icon><Lock /></el-icon></template>
       </el-input>
 
-      <div style="display: flex; gap: 10px; margin-bottom: 25px;">
-        <el-input 
-          v-model="code" 
-          placeholder="请输入 6 位验证码" 
-          size="large"
-          style="flex-grow: 1;"
-          @keyup.enter="submitForm"
-        />
-        <el-button 
-          size="large" 
-          type="primary" 
-          plain 
-          :disabled="countdown > 0" 
-          @click="sendCode"
-          style="width: 120px;"
-        >
-          {{ countdown > 0 ? `${countdown}s 后重发` : '获取验证码' }}
-        </el-button>
+      <div v-if="!isLoginMode && !isAdminMode">
+        <el-input v-model="email" placeholder="请输入 QQ 或 Gmail 邮箱" clearable size="large" style="margin-bottom: 20px;">
+          <template #prefix><el-icon><Message /></el-icon></template>
+        </el-input>
+        <div style="display: flex; gap: 10px; margin-bottom: 25px;">
+          <el-input v-model="code" placeholder="请输入 6 位验证码" size="large" style="flex-grow: 1;" />
+          <el-button size="large" type="primary" plain :disabled="countdown > 0" @click="sendCode" style="width: 120px;">
+            {{ countdown > 0 ? `${countdown}s 后重发` : '获取验证码' }}
+          </el-button>
+        </div>
       </div>
 
       <el-button 
-        type="primary" 
+        :type="isAdminMode ? 'danger' : 'primary'" 
         size="large" 
-        style="width: 100%; font-size: 16px; border-radius: 8px;"
-        :loading="loading"
+        style="width: 100%; margin-bottom: 15px; font-weight: bold;" 
+        :loading="loading" 
         @click="submitForm"
       >
-        {{ isLoginMode ? '立即登录' : '确认注册' }}
+        {{ isAdminMode ? '管理员登录' : (isLoginMode ? '立即登录' : '确认注册') }}
       </el-button>
 
-      <div style="text-align: center; margin-top: 20px;">
-        <el-button text type="info" @click="isLoginMode = !isLoginMode">
-          {{ isLoginMode ? '没有账号？点我注册' : '已有账号？去登录' }}
+      <div style="text-align: center;">
+        <el-button 
+          v-if="!isAdminMode"
+          type="primary" 
+          link 
+          @click="isLoginMode = !isLoginMode"
+        >
+          {{ isLoginMode ? '没有账号？点我注册' : '已有账号？返回登录' }}
+        </el-button>
+        
+        <el-button 
+          v-else
+          type="info" 
+          link 
+          @click="exitAdminMode"
+        >
+          返回普通用户模式
         </el-button>
       </div>
 
     </el-card>
-
   </div>
 </template>
