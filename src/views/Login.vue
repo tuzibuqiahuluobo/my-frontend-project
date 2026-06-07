@@ -35,12 +35,14 @@ const submitForm = async () => {
       ElMessage.success(data.message) // 绿色成功弹窗
       
       if (isLoginMode.value) {
-        localStorage.setItem('user', JSON.stringify({ uid: data.uid, username: username.value }))
+        // 【修改】登录成功：把后端带回来的 uid、用户名和头像，一起写进浏览器的本地记忆
+        localStorage.setItem('user', JSON.stringify({ 
+          uid: data.uid, 
+          username: username.value,
+          avatar: data.avatar // ← 核心修复：把后端返回的头像也记在小本本上！
+        }))
+        // 跳转到个人后台页面
         router.push('/dashboard')
-      } else {
-        // 注册成功后，自动切回登录模式
-        isLoginMode.value = true
-        password.value = ''
       }
     }
   } catch (error) {
