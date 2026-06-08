@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
 const posts = ref([])
 const loading = ref(true)
@@ -67,6 +67,42 @@ const submitPost = async () => {
   }
 }
 
+// 【新增】发射“轨道炮”销毁帖子的函数
+const deletePost = (postId) => {
+  // 弹出一个严肃的二次确认框，防止手滑
+  ElMessageBox.confirm(
+    '确认要永久销毁这条动态吗？该操作不可逆转！',
+    '高危操作警告',
+    {
+      confirmButtonText: '确认销毁',
+      cancelButtonText: '手滑了',
+      type: 'warning',
+    }
+  ).then(async () => {
+    try {
+      const response = await fetch('http://localhost:8080/api/delete-post', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          post_id: postId,
+          username: currentUser.value.username // 把当前登录的名字发过去核对
+        })
+      })
+      const data = await response.json()
+      if (data.error) {
+        ElMessage.error(data.error)
+      } else {
+        ElMessage.success(data.message)
+        loadPosts() // 瞬间重新拉取数据，让被删除的帖子从屏幕上消失
+      }
+    } catch (error) {
+      ElMessage.error('网络通讯中断，删除指令未送达')
+    }
+  }).catch(() => {
+    // 用户点了取消，静默处理
+  })
+}
+
 const formatDate = (timeString) => {
   const date = new Date(timeString)
   return `${date.getMonth() + 1}月${date.getDate()}日 ${date.getHours()}:${String(date.getMinutes()).padStart(2, '0')}`
@@ -116,8 +152,21 @@ const formatDate = (timeString) => {
           {{ post.content }}
         </div>
         <div class="post-actions">
-          <el-button type="primary" link icon="ChatDotRound">评论</el-button>
-          <el-button type="primary" link icon="Star">收藏</el-button>
+          <div class="left-actions">
+            <el-button type="primary" link icon="ChatDotRound">评论</el-button>
+            <el-button type="primary" link icon="Star">收藏</el-button>
+          </div>
+          
+          <div class="right-actions" v-if="post.username === currentUser.username || currentUser.username === '最高指挥官'">
+            <el-button 
+              type="danger" 
+              link 
+              icon="Delete" 
+              @click="deletePost(post.id)"
+            >
+              删除
+            </el-button>
+          </div>
         </div>
       </el-card>
     </div>
@@ -143,8 +192,23 @@ const formatDate = (timeString) => {
 
 .publish-action {
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-end; /* 核心魔法：让盒子里的内容全部往右靠 */
+  width: 100%;               /* 确保它占满整行宽度 */
   margin-top: 15px;
+}
+
+/* 修改和新增以下代码 */
+.post-actions {
+  border-top: 1px solid #ebeef5;
+  padding-top: 10px;
+  display: flex;
+  justify-content: space-between; /* 让左右两边的按钮各自靠边 */
+  align-items: center;
+}
+
+.left-actions {
+  display: flex;
+  gap: 20px;
 }
 
 /* ... 下面保留你原本写的 community-container 等所有样式不变 */
