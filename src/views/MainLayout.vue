@@ -2,7 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 // 引入我们需要用到的 Element Plus 图标
-import { ChatDotRound, User, Setting, LogOut } from '@element-plus/icons-vue'
+import { ChatDotRound, Setting } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const route = useRoute() // 用来获取当前页面在哪个路由，让菜单高亮对应项

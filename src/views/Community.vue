@@ -1,1 +1,192 @@
-<template><h1>社区帖子列表</h1></template>
+<script setup>
+import { ref, onMounted } from 'vue'
+import { ElMessage } from 'element-plus'
+
+const posts = ref([])
+const loading = ref(true)
+
+// 【新增】发帖相关的变量
+const currentUser = ref({ username: '匿名', avatar: '' })
+const newPostContent = ref('')
+const isSubmitting = ref(false)
+
+// 【改造】把获取帖子的逻辑单独抽成一个函数，方便发帖后瞬间刷新
+const loadPosts = async () => {
+  try {
+    const response = await fetch('http://localhost:8080/api/posts')
+    const data = await response.json()
+    posts.value = data
+  } catch (error) {
+    console.error("获取帖子失败", error)
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => {
+  // 1. 页面加载时，先看看是谁在登录
+  const userStr = localStorage.getItem('user')
+  if (userStr) {
+    currentUser.value = JSON.parse(userStr)
+  }
+  // 2. 拉取帖子列表
+  loadPosts()
+})
+
+// 【新增】发射帖子的核心函数
+const submitPost = async () => {
+  if (!newPostContent.value.trim()) {
+    ElMessage.warning('好歹写点什么再发呀！')
+    return
+  }
+
+  isSubmitting.value = true
+  try {
+    const response = await fetch('http://localhost:8080/api/create-post', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: currentUser.value.username,
+        avatar: currentUser.value.avatar,
+        content: newPostContent.value
+      })
+    })
+    
+    const data = await response.json()
+    if (data.error) {
+      ElMessage.error(data.error)
+    } else {
+      ElMessage.success(data.message)
+      newPostContent.value = '' // 清空输入框
+      loadPosts() // 瞬间重新拉取数据，让新帖子出现在最顶上！
+    }
+  } catch (error) {
+    ElMessage.error('网络错误，发送失败')
+  } finally {
+    isSubmitting.value = false
+  }
+}
+
+const formatDate = (timeString) => {
+  const date = new Date(timeString)
+  return `${date.getMonth() + 1}月${date.getDate()}日 ${date.getHours()}:${String(date.getMinutes()).padStart(2, '0')}`
+}
+</script>
+
+<template>
+  <div class="community-container">
+    
+    <el-card class="publish-card" shadow="never">
+      <div class="publish-area">
+        <el-avatar :size="45" :src="currentUser.avatar" />
+        <el-input
+          v-model="newPostContent"
+          type="textarea"
+          :rows="3"
+          placeholder="有什么新鲜事想和大家分享？（支持回车换行）"
+          class="publish-input"
+        />
+      </div>
+      <div class="publish-action">
+        <el-button 
+          type="primary" 
+          :loading="isSubmitting" 
+          @click="submitPost" 
+          round
+          size="large"
+          color="#38bdf8"
+        >
+          🚀 立即发布
+        </el-button>
+      </div>
+    </el-card>
+
+    <el-skeleton :rows="5" animated v-if="loading" />
+
+    <div v-else class="post-list">
+      <el-card v-for="post in posts" :key="post.id" class="post-card" shadow="hover">
+        <div class="post-header">
+          <el-avatar :size="40" :src="post.avatar" />
+          <div class="user-info">
+            <span class="username">{{ post.username }}</span>
+            <span class="time">{{ formatDate(post.created_at) }}</span>
+          </div>
+        </div>
+        <div class="post-content">
+          {{ post.content }}
+        </div>
+        <div class="post-actions">
+          <el-button type="primary" link icon="ChatDotRound">评论</el-button>
+          <el-button type="primary" link icon="Star">收藏</el-button>
+        </div>
+      </el-card>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+/* 只需要在之前代码的最底部追加这三个新样式即可 */
+.publish-card {
+  margin-bottom: 25px;
+  border-radius: 12px;
+  background-color: #ffffff;
+}
+
+.publish-area {
+  display: flex;
+  gap: 15px;
+}
+
+.publish-input {
+  flex-grow: 1;
+}
+
+.publish-action {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 15px;
+}
+
+/* ... 下面保留你原本写的 community-container 等所有样式不变 */
+.community-container {
+  max-width: 800px;
+  margin: 0 auto;
+}
+.post-card {
+  margin-bottom: 20px;
+  border-radius: 8px;
+}
+.post-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 15px;
+}
+.user-info {
+  display: flex;
+  flex-direction: column;
+  margin-left: 12px;
+}
+.username {
+  font-size: 15px;
+  font-weight: bold;
+  color: #303133;
+}
+.time {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 4px;
+}
+.post-content {
+  font-size: 14px;
+  color: #606266;
+  line-height: 1.6;
+  margin-bottom: 15px;
+  white-space: pre-wrap;
+}
+.post-actions {
+  border-top: 1px solid #ebeef5;
+  padding-top: 10px;
+  display: flex;
+  gap: 20px;
+}
+</style>

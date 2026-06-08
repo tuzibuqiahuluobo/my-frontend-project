@@ -126,7 +126,7 @@ const savePassword = () => {
     <div style="max-width: 800px; margin: 0 auto;">
       
       <el-card shadow="never" style="border-radius: 12px; padding: 20px;">
-        <el-page-header @back="router.push('/dashboard')" title="返回主页" style="margin-bottom: 30px;">
+        <el-page-header @back="router.push('/main/community')" title="返回主页" style="margin-bottom: 30px;">
           <template #content>
             <span style="font-size: 18px; font-weight: bold;">修改个人资料</span>
           </template>

@@ -51,9 +51,9 @@ const router = createRouter({
 })
 
 // 【新增】路由守卫：每次准备跳转前，进度条开始
-router.beforeEach((to, from, next) => {
+router.beforeEach((to, from) => {
     NProgress.start()
-    next()
+    return true // 【修复】用 return true 替代 next()
 })
 
 // 【新增】每次跳转完成后，进度条跑满并消失
