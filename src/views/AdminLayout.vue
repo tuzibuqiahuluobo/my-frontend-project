@@ -1,0 +1,1 @@
+<template><h1>指挥官后台画框</h1><router-view/></template>

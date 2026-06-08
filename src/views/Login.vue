@@ -132,9 +132,18 @@ const submitForm = async () => {
           username: username.value,
           avatar: data.avatar // ← 核心修复：把后端返回的头像也记在小本本上！
         }))
-        // 跳转到个人后台页面
-        router.push('/dashboard')
-      }
+        // 【核心修改】：分流跳转
+        if (isAdminMode.value) {
+            // 如果是指挥官模式登录，直接传送至后台
+            router.push('/admin')
+          } else {
+            // 如果是普通人登录，传送到迎宾欢迎页
+            router.push('/welcome')
+          }
+          } else {
+          // 注册成功，切回登录模式
+          isLoginMode.value = true
+        }
     }
   } catch (error) {
     ElMessage.error('哎呀，网络开小差了，请检查后端。')
