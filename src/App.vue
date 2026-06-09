@@ -26,6 +26,6 @@
 /* ---- 自定义进度条的颜色，把它改成 Element Plus 的主题蓝 ---- */
 #nprogress .bar {
   background: #409EFF !important;
-  height: 3px !important; /* 让进度条稍微粗一点点 */
+  height: 3px !important; /* 加粗进度条 */
 }
 </style>

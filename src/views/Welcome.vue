@@ -38,11 +38,11 @@ const enterSystem = () => {
 .welcome-container {
   width: 100vw;
   height: 100vh;
-  background: #0f172a; /* 深邃的暗夜蓝背景 */
+  background: #0f172a; /* 背景 */
   display: flex;
   justify-content: center;
   align-items: center;
-  cursor: pointer; /* 鼠标移上去变成小手，暗示可以点击 */
+  cursor: pointer; 
   user-select: none; /* 防止用户误双击选中文字 */
   overflow: hidden;
   position: relative;
@@ -56,10 +56,10 @@ const enterSystem = () => {
   font-size: 3.5rem;
   letter-spacing: 8px;
   margin: 0;
-  /* 炫酷的渐变文字特效 */
+  /* 渐变文字特效 */
   background: linear-gradient(to right, #38bdf8, #818cf8);
-  -webkit-background-clip: text; /* 原有的：WebKit内核浏览器专属 */
-  background-clip: text;         /* 【新增这行】标准属性，用来消除警告并兼容未来 */
+  -webkit-background-clip: text; 
+  background-clip: text;         /* 【新增】标准属性，用来消除警告并兼容其他浏览器 */
   color: transparent;
   animation: slideUp 1s ease-out forwards;
 }
@@ -92,7 +92,6 @@ const enterSystem = () => {
   opacity: 0.5;
 }
 
-/* ---- 魔法动画库 ---- */
 
 /* 从下往上浮现动画 */
 @keyframes slideUp {

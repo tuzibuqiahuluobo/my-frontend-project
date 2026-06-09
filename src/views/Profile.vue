@@ -116,7 +116,7 @@ const savePassword = () => {
     // 向后端发送新密码:名字不改传null，头像不改传null，密码传新的
     updateProfile(null, null, editPassword.value)
 
-    // 顺手把输入框清空，体验更好
+    // 把输入框清空
     editPassword.value = ''
 }
 </script>

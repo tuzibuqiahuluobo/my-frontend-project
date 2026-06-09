@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
-// 【新增】引入进度条和它的样式
+// 引入进度条和它的样式
 import NProgress from 'nprogress'
 import 'nprogress/nprogress.css'
 // 隐藏右上角那个一直转圈的小圆环，只保留顶部横条
@@ -19,10 +19,10 @@ const routes = [
     { path: '/', redirect: '/login' }, // 默认跳转到登录
     { path: '/login', component: Login },
 
-    // 1. 迎宾页：独立于主画框之外的全屏页面
+    // 1. 欢迎页：独立于主画框之外的全屏页面
     { path: '/welcome', component: Welcome },
 
-    // 2. 平民通道：进入主画框
+    // 2. 普通用户：进入主画框
     {
         path: '/main',
         component: MainLayout,
@@ -35,7 +35,7 @@ const routes = [
         ]
     },
 
-    // 3. 指挥官通道：进入后台画框
+    // 3. 超级管理员：进入后台画框
     {
         path: '/admin',
         component: AdminLayout,
@@ -50,13 +50,13 @@ const router = createRouter({
     routes
 })
 
-// 【新增】路由守卫：每次准备跳转前，进度条开始
+// 路由守卫：每次准备跳转前，进度条开始
 router.beforeEach((to, from) => {
     NProgress.start()
-    return true // 【修复】用 return true 替代 next()
+    return true
 })
 
-// 【新增】每次跳转完成后，进度条跑满并消失
+// 每次跳转完成后，进度条跑满并消失
 router.afterEach(() => {
     NProgress.done()
 })

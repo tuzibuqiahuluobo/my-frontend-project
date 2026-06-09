@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-// 引入我们需要用到的 Element Plus 图标
+// 引入 Element Plus 图标
 import { ChatDotRound, Setting } from '@element-plus/icons-vue'
 
 const router = useRouter()

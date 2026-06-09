@@ -10,7 +10,7 @@ const currentUser = ref({ username: '匿名', avatar: '' })
 const newPostContent = ref('')
 const isSubmitting = ref(false)
 
-// 【改造】把获取帖子的逻辑单独抽成一个函数，方便发帖后瞬间刷新
+// 【优化】把获取帖子的逻辑单独抽成一个函数，方便发帖后瞬间刷新
 const loadPosts = async () => {
   try {
     const response = await fetch('http://localhost:8080/api/posts')
@@ -33,7 +33,7 @@ onMounted(() => {
   loadPosts()
 })
 
-// 【新增】发射帖子的核心函数
+// 【新增】发送帖子的核心函数
 const submitPost = async () => {
   if (!newPostContent.value.trim()) {
     ElMessage.warning('好歹写点什么再发呀！')
@@ -58,7 +58,7 @@ const submitPost = async () => {
     } else {
       ElMessage.success(data.message)
       newPostContent.value = '' // 清空输入框
-      loadPosts() // 瞬间重新拉取数据，让新帖子出现在最顶上！
+      loadPosts() // 加载新帖子
     }
   } catch (error) {
     ElMessage.error('网络错误，发送失败')
@@ -67,9 +67,9 @@ const submitPost = async () => {
   }
 }
 
-// 【新增】发射“轨道炮”销毁帖子的函数
+// 【新增】销毁帖子的函数
 const deletePost = (postId) => {
-  // 弹出一个严肃的二次确认框，防止手滑
+  // 二次确认框
   ElMessageBox.confirm(
     '确认要永久销毁这条动态吗？该操作不可逆转！',
     '高危操作警告',
@@ -174,7 +174,7 @@ const formatDate = (timeString) => {
 </template>
 
 <style scoped>
-/* 只需要在之前代码的最底部追加这三个新样式即可 */
+
 .publish-card {
   margin-bottom: 25px;
   border-radius: 12px;
@@ -192,7 +192,7 @@ const formatDate = (timeString) => {
 
 .publish-action {
   display: flex;
-  justify-content: flex-end; /* 核心魔法：让盒子里的内容全部往右靠 */
+  justify-content: flex-end; /* 让盒子里的内容全部往右靠 */
   width: 100%;               /* 确保它占满整行宽度 */
   margin-top: 15px;
 }
@@ -211,7 +211,6 @@ const formatDate = (timeString) => {
   gap: 20px;
 }
 
-/* ... 下面保留你原本写的 community-container 等所有样式不变 */
 .community-container {
   max-width: 800px;
   margin: 0 auto;

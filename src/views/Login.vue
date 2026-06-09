@@ -1,7 +1,7 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus' // 引入大厂常用的顶部消息提示插件
+import { ElMessage } from 'element-plus' // 引入顶部消息提示插件
 
 const router = useRouter()
 const isLoginMode = ref(true)
@@ -9,7 +9,7 @@ const username = ref('')
 const password = ref('')
 const loading = ref(false) // 增加一个加载状态，点击时按钮会转圈
 
-// 控制是否进入指挥官暗黑模式
+// 控制是否进入管理员模式
 const isAdminMode = ref(false)
 
 // 连点触发器逻辑
@@ -26,7 +26,7 @@ let timer = null // 用来装定时器的盒子
 
 // 发送验证码的函数
 const sendCode = async () => {
-  // 1. 简单的邮箱格式安检
+  // 1. 简单的邮箱格式校验
   if (!email.value) {
     ElMessage.warning('请先填写邮箱！')
     return
@@ -45,7 +45,7 @@ const sendCode = async () => {
     }
   }, 1000)
 
-  // 3. 向后端发射请求
+  // 3. 向后端发送请求
   try {
     const response = await fetch('http://localhost:8080/api/send-code', {
       method: 'POST',
@@ -126,18 +126,18 @@ const submitForm = async () => {
       ElMessage.success(data.message) // 绿色成功弹窗
       
       if (isLoginMode.value) {
-        // 【修改】登录成功：把后端带回来的 uid、用户名和头像，一起写进浏览器的本地记忆
+        // 【优化】登录成功：把后端带回来的 uid、用户名和头像，一起写进浏览器的本地记忆
         localStorage.setItem('user', JSON.stringify({ 
           uid: data.uid, 
           username: username.value,
-          avatar: data.avatar // ← 核心修复：把后端返回的头像也记在小本本上！
+          avatar: data.avatar 
         }))
-        // 【核心修改】：分流跳转
+        // 【优化】：分流跳转
         if (isAdminMode.value) {
-            // 如果是指挥官模式登录，直接传送至后台
+            // 如果是管理员登录，直接传送至后台
             router.push('/admin')
           } else {
-            // 如果是普通人登录，传送到迎宾欢迎页
+            // 如果是普通用户登录，传送到欢迎页
             router.push('/welcome')
           }
           } else {
