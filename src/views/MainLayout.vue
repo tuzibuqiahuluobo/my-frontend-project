@@ -73,7 +73,7 @@ const handleCommand = (command) => {
             <el-dropdown @command="handleCommand" trigger="click">
               <div class="avatar-wrapper">
                 <el-avatar :size="35" :src="currentUser.avatar" />
-                <span class="user-name">{{ currentUser.username }}</span>
+                <span class="user-name">{{ currentUser.nickname || currentUser.username }}</span>
               </div>
               <template #dropdown>
                 <el-dropdown-menu>

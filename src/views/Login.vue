@@ -2,7 +2,8 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus' // 引入顶部消息提示插件
-
+// 【新增】引入我们用到的三个输入框前缀图标
+import { User, Lock, Message } from '@element-plus/icons-vue'
 const router = useRouter()
 const isLoginMode = ref(true)
 const username = ref('')
@@ -129,7 +130,8 @@ const submitForm = async () => {
         // 【优化】登录成功：把后端带回来的 uid、用户名和头像，一起写进浏览器的本地记忆
         localStorage.setItem('user', JSON.stringify({ 
           uid: data.uid, 
-          username: username.value,
+          username: data.username, // 登录用的账号（不可随意修改的那个）
+          nickname: data.nickname, // 【新增】保存昵称
           avatar: data.avatar 
         }))
         // 【优化】：分流跳转

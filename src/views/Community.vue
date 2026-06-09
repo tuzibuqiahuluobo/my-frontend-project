@@ -47,6 +47,7 @@ const submitPost = async () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         username: currentUser.value.username,
+        nickname: currentUser.value.nickname || currentUser.value.username, // 新增
         avatar: currentUser.value.avatar,
         content: newPostContent.value
       })
@@ -144,7 +145,7 @@ const formatDate = (timeString) => {
         <div class="post-header">
           <el-avatar :size="40" :src="post.avatar" />
           <div class="user-info">
-            <span class="username">{{ post.username }}</span>
+            <span class="username">{{ post.nickname || post.username }}</span>
             <span class="time">{{ formatDate(post.created_at) }}</span>
           </div>
         </div>

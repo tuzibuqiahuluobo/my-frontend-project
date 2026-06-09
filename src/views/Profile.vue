@@ -1,17 +1,19 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus' // 新增引入 ElMessageBox
 import 'vue-cropper/dist/index.css'
 import { VueCropper } from 'vue-cropper'
 
 const router = useRouter()
-const currentUser = ref({ uid: null, username: '', avatar: '' })
+// 新增 nickname 字段
+const currentUser = ref({ uid: null, username: '', nickname: '', avatar: '' })
 
-// 表单里的用户名（独立出来，避免还没点保存就改变了标题）
+// 表单绑定的独立变量
+const editNickname = ref('') // 新增：昵称输入框
 const editUsername = ref('')
-const saving = ref(false)
 const editPassword = ref('')
+const saving = ref(false)
 
 // 裁剪器相关状态
 const fileInputRef = ref(null)
@@ -25,12 +27,14 @@ onMounted(() => {
     router.push('/login')
   } else {
     currentUser.value = JSON.parse(userStr)
-    editUsername.value = currentUser.value.username // 初始化输入框的值
+    editUsername.value = currentUser.value.username
+    // 初始化昵称，如果没有设置过，默认先显示用户名兜底
+    editNickname.value = currentUser.value.nickname || currentUser.value.username 
   }
 })
 
-// 核心的向后端发送数据的函数
-const updateProfile = async (newUsername, newAvatar, newPassword) => {
+// 【优化】将参数改为对象形式，方便后续无限扩展，清晰明了
+const updateProfile = async ({ newUsername, newAvatar, newPassword, newNickname, currentPassword }) => {
   saving.value = true
   try {
     const response = await fetch('http://localhost:8080/api/update', {
@@ -39,7 +43,10 @@ const updateProfile = async (newUsername, newAvatar, newPassword) => {
       body: JSON.stringify({ 
         uid: currentUser.value.uid, 
         username: newUsername || '', 
-        avatar: newAvatar || '' 
+        avatar: newAvatar || '',
+        password: newPassword || '',
+        nickname: newNickname || '',                 // 传给后端的昵称
+        current_password: currentPassword || ''      // 传给后端用于修改用户名的验证密码
       })
     })
     
@@ -48,11 +55,19 @@ const updateProfile = async (newUsername, newAvatar, newPassword) => {
       ElMessage.error(data.error)
     } else {
       ElMessage.success('资料更新成功！')
+      // 同步更新页面上的状态
       if (newUsername) currentUser.value.username = newUsername
+      if (newNickname) currentUser.value.nickname = newNickname
       if (newAvatar) currentUser.value.avatar = newAvatar
+      
       // 同步到本地记忆本
       localStorage.setItem('user', JSON.stringify(currentUser.value))
       cropDialogVisible.value = false
+      
+      // 如果改了昵称或头像，触发全局事件或轻微延迟刷新让右上角同步
+      if (newNickname || newAvatar) {
+        setTimeout(() => window.location.reload(), 500)
+      }
     }
   } catch (error) {
     ElMessage.error('网络错误，请稍后再试')
@@ -87,13 +102,26 @@ const onFileSelected = (event) => {
 const confirmCrop = () => {
   if (!cropperRef.value) return
   cropperRef.value.getCropData((data) => {
-    updateProfile(null, data) // 发送 Base64 文本给后端
+    updateProfile({ newAvatar: data }) // 仅更新头像
   })
 }
 
-// ---- 修改用户名流程 ----
+// ---- 新增：修改社区昵称流程 ----
+const saveNickname = () => {
+  if (!editNickname.value.trim()) {
+    ElMessage.warning('昵称不能为空哦')
+    return
+  }
+  if (editNickname.value === currentUser.value.nickname) {
+    ElMessage.info('昵称没有修改')
+    return
+  }
+  updateProfile({ newNickname: editNickname.value })
+}
+
+// ---- 修改用户名流程 (加入密码验证安检门) ----
 const saveUsername = () => {
-  if (!editUsername.value) {
+  if (!editUsername.value.trim()) {
     ElMessage.warning('用户名不能为空哦')
     return
   }
@@ -101,9 +129,23 @@ const saveUsername = () => {
     ElMessage.info('用户名没有修改')
     return
   }
-  updateProfile(editUsername.value, null)
+  
+  // 弹出密码验证框
+  ElMessageBox.prompt('修改登录账号属于高危操作，请输入当前密码进行验证：', '安全验证', {
+    confirmButtonText: '验证并修改',
+    cancelButtonText: '取消',
+    inputType: 'password',
+    inputPattern: /.+/,
+    inputErrorMessage: '密码不能为空',
+  }).then(({ value }) => {
+    // 用户输入了密码并点击确认，将新用户名和当前密码一起发给后端
+    updateProfile({ newUsername: editUsername.value, currentPassword: value })
+  }).catch(() => {
+    // 取消操作
+  })
 }
 
+// ---- 修改密码流程 ----
 const savePassword = () => {
     if (!editPassword.value) {
         ElMessage.warning('密码不能为空哦')
@@ -113,10 +155,7 @@ const savePassword = () => {
         ElMessage.warning('密码太短啦，至少6位哦')
         return
     }
-    // 向后端发送新密码:名字不改传null，头像不改传null，密码传新的
-    updateProfile(null, null, editPassword.value)
-
-    // 把输入框清空
+    updateProfile({ newPassword: editPassword.value })
     editPassword.value = ''
 }
 </script>
@@ -143,12 +182,21 @@ const savePassword = () => {
           <input type="file" ref="fileInputRef" style="display: none;" accept="image/*" @change="onFileSelected" />
         </div>
 
-        <el-form label-width="100px" style="max-width: 400px; margin: 0 auto;">
+        <el-form label-width="100px" style="max-width: 450px; margin: 0 auto;">
           <el-form-item label="UID">
             <el-input :value="String(currentUser.uid).padStart(5, '0')" disabled />
           </el-form-item>
+
+
+          <el-form-item label="社区昵称">
+            <el-input v-model="editNickname" placeholder="请输入展示的昵称" clearable @keyup.enter="saveNickname">
+              <template #append>
+                <el-button type="success" :loading="saving" @click="saveNickname">保存昵称</el-button>
+              </template>
+            </el-input>
+          </el-form-item>
           
-          <el-form-item label="用户名">
+          <el-form-item label="登录账号">
             <el-input v-model="editUsername" placeholder="请输入新的用户名" clearable @keyup.enter="saveUsername">
               <template #append>
                 <el-button type="primary" :loading="saving" @click="saveUsername">保存修改</el-button>

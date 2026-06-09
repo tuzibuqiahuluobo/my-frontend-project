@@ -9,7 +9,9 @@ onMounted(() => {
   // 从本地记忆里读取用户名，用来打招呼
   const userStr = localStorage.getItem('user')
   if (userStr) {
-    username.value = JSON.parse(userStr).username
+    const userObj = JSON.parse(userStr)
+    // 【修改】优先显示昵称，如果老账号没昵称就降级显示用户名
+    username.value = userObj.nickname || userObj.username
   }
 })
 
