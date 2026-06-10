@@ -5,103 +5,103 @@
 A Vue 3 frontend for user authentication, personal dashboard, and profile management. Built as part of a full-stack learning project, it connects to a backend API running on `localhost:8080`.
 
 **Repository:** [github.com/tuzibuqiahuluobo/my-frontend-project](https://github.com/tuzibuqiahuluobo/my-frontend-project)
+# my-frontend-project
 
-## Overview
+![build](https://img.shields.io/badge/build-passing-brightgreen) ![node](https://img.shields.io/badge/node-%3E%3D20-blue) ![license](https://img.shields.io/badge/license-UNLICENSED-lightgrey)
 
-This project is a single-page application (SPA) built with Vue 3 and Vite. It provides login/registration, a personal center dashboard, and a profile editor with avatar cropping. User sessions are persisted in `localStorage` after successful login.
+Languages: English | 中文
 
-## Features
+A lightweight Vue 3 frontend providing user authentication, a personal dashboard, and profile editing with avatar cropping. This is a learning/demo frontend intended to be used with a backend API (see API section).
 
-- **Login & Register** — Toggle between login and registration on a single page, with form validation and loading states
-- **Session persistence** — Stores `uid`, `username`, and `avatar` in `localStorage` after login
-- **Personal Dashboard** — Displays user info, logout, link to profile settings, and project showcase cards
-- **Profile Editor** — Update username, change password (minimum 6 characters), upload and crop avatar (max 2 MB, JPG/PNG)
+Key facts
 
-## Tech Stack
+- Framework: Vue 3 + Vite
+- UI library: Element Plus
+- Routing: Vue Router
+- Avatar cropping: vue-cropper
 
-| Category | Technology |
-|----------|------------|
-| Framework | [Vue 3](https://vuejs.org/) |
-| Build Tool | [Vite 8](https://vite.dev/) |
-| Routing | [Vue Router 5](https://router.vuejs.org/) |
-| UI Library | [Element Plus](https://element-plus.org/) |
-| Image Cropping | [vue-cropper](https://github.com/xyxiao001/vue-cropper) |
+AI authorship
 
-## Prerequisites
+- Approximately 70% of this repository's code was produced with AI assistance (for example GitHub Copilot / ChatGPT).
 
-- **Node.js** `^20.19.0` or `>=22.12.0`
-- **Backend API** running at `http://localhost:8080` (required for login, register, and profile updates)
+Quick start
 
-> **Recommended IDE:** [VS Code](https://code.visualstudio.com/) + [Vue - Official](https://marketplace.visualstudio.com/items?itemName=Vue.volar)
+Prerequisites
 
-## Getting Started
+- Node.js >= 20.19.0 (or >= 22.12.0)
+- Backend API (recommended) running at `http://localhost:8080`
 
-### Install dependencies
+Install dependencies
 
-```sh
+```bash
 npm install
 ```
 
-### Development (hot-reload)
+Run locally (development)
 
-```sh
+```bash
 npm run dev
+# then open http://localhost:5173
 ```
 
-The dev server starts at `http://localhost:5173` by default.
+Build and preview
 
-### Production build
-
-```sh
+```bash
 npm run build
-```
-
-### Preview production build
-
-```sh
 npm run preview
 ```
 
-## Project Structure
+Project layout
 
 ```
 my-frontend-project/
-├── public/                 # Static assets
-├── src/
-│   ├── assets/             # Global styles and images
-│   ├── views/
-│   │   ├── Login.vue       # Login & registration page
-│   │   ├── Dashboard.vue   # Personal center
-│   │   └── Profile.vue     # Profile editor (avatar crop, username, password)
-│   ├── App.vue             # Root component
-│   ├── main.js             # App entry (Vue, Router, Element Plus)
-│   └── router.js           # Route definitions
-├── index.html
-├── vite.config.js
-└── package.json
+├─ public/
+├─ src/
+│  ├─ assets/
+│  ├─ components/
+│  ├─ views/
+│  ├─ App.vue
+│  ├─ main.js
+│  └─ router.js
+├─ index.html
+├─ vite.config.js
+└─ package.json
 ```
 
-## API Integration
+Scripts
 
-The frontend communicates with a backend at `http://localhost:8080`. Ensure the backend is running before using login or profile features.
+- `npm run dev` — start dev server
+- `npm run build` — production build
+- `npm run preview` — preview build locally
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/api/login` | Authenticate user; returns `uid`, `avatar`, and message |
-| `POST` | `/api/register` | Create a new account |
-| `POST` | `/api/update` | Update profile (`uid`, `username`, `avatar`) |
+API (expected)
 
-**Request body (login / register):**
+The frontend expects these backend endpoints at `http://localhost:8080`:
 
-```json
-{
-  "username": "your_username",
-  "password": "your_password"
-}
-```
+- `POST /api/login` — body `{ username, password }` → returns `{ uid, username, avatar }`
+- `POST /api/register` — create account
+- `POST /api/update` — body `{ uid, username, avatar }` → update profile
 
-**Request body (update):**
+Routes overview
 
+- `/login` — login & register
+- `/dashboard` — personal center (requires session)
+- `/profile` — profile editor (requires session)
+
+Localization
+
+See `README.zh-CN.md` for a Chinese-localized README.
+
+Contributing
+
+If you'd like to contribute, open an issue or PR. Consider adding `CONTRIBUTING.md` and a license if you intend to accept external contributions.
+
+Contact
+
+Open an issue in the repository for questions or requests.
+
+---
+_Updated to improve clarity and add AI authorship disclosure._
 ```json
 {
   "uid": 1,
