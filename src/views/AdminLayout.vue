@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { apiRequest, clearStoredUser } from '../api'
 
 const router = useRouter()
 const activeTab = ref('users') // 默认选中的标签页
@@ -15,10 +16,9 @@ const loading = ref(false)
 const fetchAllUsers = async () => {
   loading.value = true
   try {
-    const response = await fetch('http://localhost:8080/api/users?admin=超级管理员')
-    userList.value = await response.json()
+    userList.value = await apiRequest('/api/users')
   } catch (error) {
-    ElMessage.error('无法同步全球用户数据')
+    ElMessage.error(error.message || '无法同步全球用户数据')
   } finally {
     loading.value = false
   }
@@ -28,10 +28,9 @@ const fetchAllUsers = async () => {
 const fetchAllPosts = async () => {
   loading.value = true
   try {
-    const response = await fetch('http://localhost:8080/api/posts')
-    postList.value = await response.json()
+    postList.value = await apiRequest('/api/posts')
   } catch (error) {
-    ElMessage.error('无法同步社区广播数据')
+    ElMessage.error(error.message || '无法同步社区广播数据')
   } finally {
     loading.value = false
   }
@@ -45,16 +44,14 @@ const terminateUser = (uid, username) => {
     { confirmButtonText: '强制执行', cancelButtonText: '暂缓执行', type: 'error' }
   ).then(async () => {
     try {
-      const response = await fetch('http://localhost:8080/api/delete-user', {
+      const data = await apiRequest('/api/delete-user', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ admin_name: '超级管理员', target_uid: uid })
+        body: JSON.stringify({ target_uid: uid })
       })
-      const data = await response.json()
       ElMessage.success(data.message)
       fetchAllUsers() // 刷新用户仓
     } catch (error) {
-      ElMessage.error('指令发送失败')
+      ElMessage.error(error.message || '指令发送失败')
     }
   })
 }
@@ -67,21 +64,21 @@ const obliteratePost = (postId) => {
     { confirmButtonText: '强制删除任何帖子', cancelButtonText: '保留', type: 'warning' }
   ).then(async () => {
     try {
-      const response = await fetch('http://localhost:8080/api/delete-post', {
+      const data = await apiRequest('/api/delete-post', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ post_id: postId, username: '超级管理员' })
+        body: JSON.stringify({ post_id: postId })
       })
-      ElMessage.success('该动态已被彻底抹除')
+      ElMessage.success(data.message)
       fetchAllPosts() // 刷新帖子仓
     } catch (error) {
-      ElMessage.error('清除失败')
+      ElMessage.error(error.message || '清除失败')
     }
   })
 }
 
 // 退出后台回到普通用户登录界面
 const exitCommandCenter = () => {
+  clearStoredUser()
   router.push('/login')
 }
 
@@ -101,7 +98,7 @@ onMounted(() => {
     <header class="admin-header">
       <div class="header-left">
         <span class="pulse-dot"></span>
-        <h2>最高管理中心 <span class="version-tag">SYSTEM OVERRIDE v1.0</span></h2>
+        <h2>SunShine 管理中心 <span class="version-tag">SYSTEM OVERRIDE v1.0</span></h2>
       </div>
       <el-button type="danger" plain size="small" @click="exitCommandCenter">
         退出控制台

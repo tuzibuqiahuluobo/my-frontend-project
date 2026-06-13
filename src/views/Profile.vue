@@ -4,10 +4,11 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus' // 新增引入 ElMessageBox
 import 'vue-cropper/dist/index.css'
 import { VueCropper } from 'vue-cropper'
+import { apiRequest, getStoredUser, saveStoredUser } from '../api'
 
 const router = useRouter()
 // 新增 nickname 字段
-const currentUser = ref({ uid: null, username: '', nickname: '', avatar: '' })
+const currentUser = ref({ uid: null, username: '', nickname: '', avatar: '', role: 0, token: '' })
 
 // 表单绑定的独立变量
 const editNickname = ref('') // 新增：昵称输入框
@@ -22,11 +23,11 @@ const cropperRef = ref(null)
 const rawImageUrl = ref('')
 
 onMounted(() => {
-  const userStr = localStorage.getItem('user')
-  if (!userStr) {
+  const user = getStoredUser()
+  if (!user) {
     router.push('/login')
   } else {
-    currentUser.value = JSON.parse(userStr)
+    currentUser.value = user
     editUsername.value = currentUser.value.username
     // 初始化昵称，如果没有设置过，默认先显示用户名兜底
     editNickname.value = currentUser.value.nickname || currentUser.value.username 
@@ -37,11 +38,9 @@ onMounted(() => {
 const updateProfile = async ({ newUsername, newAvatar, newPassword, newNickname, currentPassword }) => {
   saving.value = true
   try {
-    const response = await fetch('http://localhost:8080/api/update', {
+    const data = await apiRequest('/api/update', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
-        uid: currentUser.value.uid, 
         username: newUsername || '', 
         avatar: newAvatar || '',
         password: newPassword || '',
@@ -49,28 +48,27 @@ const updateProfile = async ({ newUsername, newAvatar, newPassword, newNickname,
         current_password: currentPassword || ''      // 传给后端用于修改用户名的验证密码
       })
     })
+
+    ElMessage.success(data.message || '资料更新成功！')
+    currentUser.value = {
+      uid: data.uid,
+      username: data.username,
+      nickname: data.nickname,
+      avatar: data.avatar,
+      role: data.role,
+      token: data.token
+    }
+    editUsername.value = currentUser.value.username
+    editNickname.value = currentUser.value.nickname || currentUser.value.username
+    saveStoredUser(currentUser.value)
+    cropDialogVisible.value = false
     
-    const data = await response.json()
-    if (data.error) {
-      ElMessage.error(data.error)
-    } else {
-      ElMessage.success('资料更新成功！')
-      // 同步更新页面上的状态
-      if (newUsername) currentUser.value.username = newUsername
-      if (newNickname) currentUser.value.nickname = newNickname
-      if (newAvatar) currentUser.value.avatar = newAvatar
-      
-      // 同步到本地记忆本
-      localStorage.setItem('user', JSON.stringify(currentUser.value))
-      cropDialogVisible.value = false
-      
-      // 如果改了昵称或头像，触发全局事件或轻微延迟刷新让右上角同步
-      if (newNickname || newAvatar) {
-        setTimeout(() => window.location.reload(), 500)
-      }
+    // 如果改了昵称或头像，轻微延迟刷新让右上角用户信息同步
+    if (newNickname || newAvatar) {
+      setTimeout(() => window.location.reload(), 500)
     }
   } catch (error) {
-    ElMessage.error('网络错误，请稍后再试')
+    ElMessage.error(error.message || '网络错误，请稍后再试')
   } finally {
     saving.value = false
   }

@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus' // 引入顶部消息提示插件
 // 【新增】引入我们用到的三个输入框前缀图标
 import { User, Lock, Message } from '@element-plus/icons-vue'
+import { apiRequest, saveStoredUser } from '../api'
 const router = useRouter()
 const isLoginMode = ref(true)
 const username = ref('')
@@ -48,22 +49,13 @@ const sendCode = async () => {
 
   // 3. 向后端发送请求
   try {
-    const response = await fetch('http://localhost:8080/api/send-code', {
+    const data = await apiRequest('/api/send-code', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: email.value })
     })
-    const data = await response.json()
-    if (data.error) {
-      ElMessage.error(data.error)
-      // 如果发送失败，马上重置倒计时让用户可以重试
-      countdown.value = 0
-      clearInterval(timer)
-    } else {
-      ElMessage.success(data.message)
-    }
+    ElMessage.success(data.message)
   } catch (error) {
-    ElMessage.error('网络错误，请检查后端是否启动')
+    ElMessage.error(error.message || '网络错误，请检查后端是否启动')
     countdown.value = 0
     clearInterval(timer)
   }
@@ -103,14 +95,11 @@ const submitForm = async () => {
   }
 
   loading.value = true // 开启按钮转圈
-  const url = isLoginMode.value 
-    ? 'http://localhost:8080/api/login' 
-    : 'http://localhost:8080/api/register'
+  const url = isLoginMode.value ? '/api/login' : '/api/register'
 
   try {
-    const response = await fetch(url, {
+    const data = await apiRequest(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
         username: username.value, 
         password: password.value,
@@ -118,37 +107,30 @@ const submitForm = async () => {
         code: code.value
        })
     })
-
-    const data = await response.json()
     
-    if (data.error) {
-      ElMessage.error(data.error) // 红色错误弹窗
+    if (isLoginMode.value) {
+      if (isAdminMode.value && Number(data.role) !== 2) {
+        ElMessage.error('这个账号不是超级管理员，不能进入后台')
+        return
+      }
+
+      saveStoredUser({
+        uid: data.uid,
+        username: data.username,
+        nickname: data.nickname,
+        avatar: data.avatar,
+        role: data.role,
+        token: data.token
+      })
+
+      ElMessage.success(data.message)
+      router.push(isAdminMode.value ? '/admin' : '/welcome')
     } else {
-      ElMessage.success(data.message) // 绿色成功弹窗
-      
-      if (isLoginMode.value) {
-        // 【优化】登录成功：把后端带回来的 uid、用户名和头像，一起写进浏览器的本地记忆
-        localStorage.setItem('user', JSON.stringify({ 
-          uid: data.uid, 
-          username: data.username, // 登录用的账号（不可随意修改的那个）
-          nickname: data.nickname, // 【新增】保存昵称
-          avatar: data.avatar 
-        }))
-        // 【优化】：分流跳转
-        if (isAdminMode.value) {
-            // 如果是管理员登录，直接传送至后台
-            router.push('/admin')
-          } else {
-            // 如果是普通用户登录，传送到欢迎页
-            router.push('/welcome')
-          }
-          } else {
-          // 注册成功，切回登录模式
-          isLoginMode.value = true
-        }
+      ElMessage.success(data.message)
+      isLoginMode.value = true
     }
   } catch (error) {
-    ElMessage.error('哎呀，网络开小差了，请检查后端。')
+    ElMessage.error(error.message || '哎呀，网络开小差了，请检查后端。')
   } finally {
     loading.value = false // 关闭转圈
   }
@@ -172,7 +154,7 @@ const submitForm = async () => {
           {{ isAdminMode ? '⚠️ 超级管理员通道' : '欢迎回来 👋' }}
         </h2>
         <p :style="{ color: isAdminMode ? '#909399' : '#909399', fontSize: '14px' }">
-          {{ isAdminMode ? '进入超级管理员后台' : (isLoginMode ? '开启你的全栈开发之旅' : '注册一个新账号') }}
+          {{ isAdminMode ? '进入超级管理员后台' : (isLoginMode ? '欢迎来到 SunShine' : '注册一个新账号') }}
         </p>
       </div>
 

@@ -2,12 +2,13 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ChatDotRound, Star, StarFilled, Delete } from '@element-plus/icons-vue'
+import { apiRequest, getStoredUser, isAdmin } from '../api'
 
 const posts = ref([])
 const loading = ref(true)
 
 // 【新增】发帖相关的变量
-const currentUser = ref({ uid: null, username: '匿名', nickname: '', avatar: '' })
+const currentUser = ref({ uid: null, username: '匿名', nickname: '', avatar: '', role: 0, token: '' })
 const newPostContent = ref('')
 const isSubmitting = ref(false)
 
@@ -22,9 +23,8 @@ const loadPosts = async () => {
     posts.value.forEach(post => {
       stateMap[post.id] = post.showComments
     })
-    // 带上当前登录用户的 UID，让后端告诉我们哪些帖子我们已经收藏过了
-    const response = await fetch(`http://localhost:8080/api/posts?uid=${currentUser.value.uid || ''}`)
-    const data = await response.json()
+    // 如果用户已登录，apiRequest 会自动带上 token，后端会据此判断哪些帖子已收藏
+    const data = await apiRequest('/api/posts')
     // 刷新后：去字典里核对，之前是展开的就保持展开，如果是新帖子就默认折叠(false)
     posts.value = data.map(post => ({ 
       ...post, 
@@ -32,6 +32,7 @@ const loadPosts = async () => {
     }))
   } catch (error) {
     console.error("获取帖子失败", error)
+    ElMessage.error(error.message || '获取帖子失败')
   } finally {
     loading.value = false
   }
@@ -39,9 +40,9 @@ const loadPosts = async () => {
 
 onMounted(() => {
   // 1. 页面加载时，先看看是谁在登录
-  const userStr = localStorage.getItem('user')
-  if (userStr) {
-    currentUser.value = JSON.parse(userStr)
+  const user = getStoredUser()
+  if (user) {
+    currentUser.value = user
   }
   // 2. 拉取帖子列表
   loadPosts()
@@ -56,27 +57,18 @@ const submitPost = async () => {
 
   isSubmitting.value = true
   try {
-    const response = await fetch('http://localhost:8080/api/create-post', {
+    const data = await apiRequest('/api/create-post', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        username: currentUser.value.username,
-        nickname: currentUser.value.nickname || currentUser.value.username, // 新增
-        avatar: currentUser.value.avatar,
         content: newPostContent.value
       })
     })
-    
-    const data = await response.json()
-    if (data.error) {
-      ElMessage.error(data.error)
-    } else {
-      ElMessage.success(data.message)
-      newPostContent.value = '' // 清空输入框
-      loadPosts() // 加载新帖子
-    }
+
+    ElMessage.success(data.message)
+    newPostContent.value = '' // 清空输入框
+    loadPosts() // 加载新帖子
   } catch (error) {
-    ElMessage.error('网络错误，发送失败')
+    ElMessage.error(error.message || '网络错误，发送失败')
   } finally {
     isSubmitting.value = false
   }
@@ -91,25 +83,17 @@ const submitComment = async (postId) => {
   }
 
   try {
-    const response = await fetch('http://localhost:8080/api/create-comment', {
+    const data = await apiRequest('/api/create-comment', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         post_id: postId,
-        username: currentUser.value.username,
-        nickname: currentUser.value.nickname || currentUser.value.username,
-        avatar: currentUser.value.avatar,
         content: content
       })
     })
-    const data = await response.json()
-    if (data.error) { ElMessage.error(data.error) } 
-    else {
-      ElMessage.success('评论成功！')
-      commentInputs.value[postId] = '' // 清空输入框
-      loadPosts() // 刷新列表，带出最新评论
-    }
-  } catch (error) { ElMessage.error('评论发送失败') }
+    ElMessage.success(data.message)
+    commentInputs.value[postId] = '' // 清空输入框
+    loadPosts() // 刷新列表，带出最新评论
+  } catch (error) { ElMessage.error(error.message || '评论发送失败') }
 }
 
 // 切换收藏状态逻辑
@@ -119,19 +103,42 @@ const toggleFavorite = async (post) => {
     return
   }
   try {
-    const response = await fetch('http://localhost:8080/api/toggle-favorite', {
+    const data = await apiRequest('/api/toggle-favorite', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ uid: currentUser.value.uid, post_id: post.id })
+      body: JSON.stringify({ post_id: post.id })
     })
-    const data = await response.json()
     ElMessage.success(data.message)
     
     // 纯前端丝滑刷新状态，无需重新请求整张表，提升交互体验
     post.is_favorited = data.is_favorited
     if (data.is_favorited) { post.favorite_count++ } 
     else { post.favorite_count-- }
-  } catch (error) { ElMessage.error('收藏失败') }
+  } catch (error) { ElMessage.error(error.message || '收藏失败') }
+}
+
+// ✨【新增】删除评论逻辑
+const deleteComment = (commentId) => {
+  ElMessageBox.confirm('确认要删除这条评论吗？', '提示', {
+    confirmButtonText: '删除',
+    cancelButtonText: '取消',
+    type: 'warning',
+  }).then(async () => {
+    try {
+      const data = await apiRequest('/api/delete-comment', {
+        method: 'POST',
+        body: JSON.stringify({
+          comment_id: commentId
+        })
+      })
+      ElMessage.success(data.message)
+      // 重新拉取数据！因为我们上一轮做了“状态记忆”，所以刷新后评论抽屉依然会开着，体验极佳
+      loadPosts() 
+    } catch (error) {
+      ElMessage.error(error.message || '网络通讯中断，删除失败')
+    }
+  }).catch(() => {
+    // 静默取消
+  })
 }
 
 // 销毁帖子的函数
@@ -147,23 +154,16 @@ const deletePost = (postId) => {
     }
   ).then(async () => {
     try {
-      const response = await fetch('http://localhost:8080/api/delete-post', {
+      const data = await apiRequest('/api/delete-post', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          post_id: postId,
-          username: currentUser.value.username // 把当前登录的名字发过去核对
+          post_id: postId
         })
       })
-      const data = await response.json()
-      if (data.error) {
-        ElMessage.error(data.error)
-      } else {
-        ElMessage.success(data.message)
-        loadPosts() // 瞬间重新拉取数据，让被删除的帖子从屏幕上消失
-      }
+      ElMessage.success(data.message)
+      loadPosts() // 瞬间重新拉取数据，让被删除的帖子从屏幕上消失
     } catch (error) {
-      ElMessage.error('网络通讯中断，删除指令未送达')
+      ElMessage.error(error.message || '网络通讯中断，删除指令未送达')
     }
   }).catch(() => {
     // 用户点了取消，静默处理
@@ -241,7 +241,7 @@ const formatDate = (timeString) => {
               </el-button>
             </div>
 
-            <div class="right-actions" v-if="post.username === currentUser.username || currentUser.username === '最高指挥官'">
+            <div class="right-actions" v-if="post.username === currentUser.username || isAdmin(currentUser)">
               <el-button type="danger" link icon="Delete" @click="deletePost(post.id)">
                 删除
               </el-button>
@@ -269,8 +269,21 @@ const formatDate = (timeString) => {
                   <el-avatar :size="28" :src="comment.avatar" />
                   <div class="comment-body">
                     <div class="comment-user">
-                      <span class="comment-name">{{ comment.nickname || comment.username }}</span>
-                      <span class="comment-time">{{ formatDate(comment.created_at) }}</span>
+                      <div style="display: flex; gap: 10px; align-items: baseline;">
+                        <span class="comment-name">{{ comment.nickname || comment.username }}</span>
+                        <span class="comment-time">{{ formatDate(comment.created_at) }}</span>
+                      </div>
+                      
+                      <el-button 
+                        v-if="comment.username === currentUser.username || isAdmin(currentUser)"
+                        type="danger" 
+                        link 
+                        icon="Delete" 
+                        size="small"
+                        @click="deleteComment(comment.id)"
+                      >
+                        删除
+                      </el-button>
                     </div>
                     <div class="comment-text">{{ comment.content }}</div>
                   </div>

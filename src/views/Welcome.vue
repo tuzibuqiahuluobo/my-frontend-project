@@ -1,15 +1,15 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { getStoredUser } from '../api'
 
 const router = useRouter()
-const username = ref('开发者')
+const username = ref('SunShine')
 
 onMounted(() => {
   // 从本地记忆里读取用户名，用来打招呼
-  const userStr = localStorage.getItem('user')
-  if (userStr) {
-    const userObj = JSON.parse(userStr)
+  const userObj = getStoredUser()
+  if (userObj) {
     // 【修改】优先显示昵称，如果老账号没昵称就降级显示用户名
     username.value = userObj.nickname || userObj.username
   }
@@ -25,7 +25,7 @@ const enterSystem = () => {
   <div class="welcome-container" @click="enterSystem">
     
     <div class="content">
-      <h1 class="title">SYSTEM ONLINE</h1>
+      <h1 class="title">SunShine</h1>
       <h2 class="subtitle">欢迎回来，{{ username }}</h2>
       
       <p class="blink-text">[ 点击屏幕任意位置进入 ]</p>

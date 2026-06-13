@@ -12,6 +12,7 @@ import Welcome from './views/Welcome.vue'
 import AdminLayout from './views/AdminLayout.vue'
 import Community from './views/Community.vue'
 import MainLayout from './views/MainLayout.vue'
+import { getStoredUser, isAdmin } from './api'
 
 
 
@@ -20,18 +21,55 @@ const routes = [
     { path: '/login', component: Login },
 
     // 1. 欢迎页：独立于主画框之外的全屏页面
-    { path: '/welcome', component: Welcome },
+    { path: '/welcome', component: Welcome, meta: { requiresAuth: true } },
 
     // 2. 普通用户：进入主画框
     {
         path: '/main',
         component: MainLayout,
+        meta: { requiresAuth: true },
         redirect: '/main/community', // 一进主画框，默认显示社区
         children: [
             // 这些子页面都会被渲染在 MainLayout 的 <router-view> 里面
-            { path: 'community', component: Community },
-            { path: 'profile', component: Profile },
-            { path: 'dashboard', component: Dashboard }
+            {
+                path: 'community',
+                component: Community,
+                meta: {
+                    title: '社区广场',
+                    icon: 'ChatDotRound',
+                    menu: true
+                }
+            },
+            {
+                path: 'dashboard',
+                component: Dashboard,
+                meta: {
+                    title: '个人中心',
+                    icon: 'User',
+                    menu: true
+                }
+            },
+            {
+                path: 'settings',
+                redirect: '/main/settings/profile',
+                meta: {
+                    title: '设置中心',
+                    icon: 'Setting',
+                    menu: true
+                },
+                children: [
+                    {
+                        path: 'profile',
+                        component: Profile,
+                        meta: {
+                            title: '个人设置',
+                            icon: 'Setting',
+                            menu: true
+                        }
+                    }
+                ]
+            },
+            { path: 'profile', redirect: '/main/settings/profile' }
         ]
     },
 
@@ -39,6 +77,7 @@ const routes = [
     {
         path: '/admin',
         component: AdminLayout,
+        meta: { requiresAuth: true, requiresAdmin: true },
         children: [
             // 未来这里会放“用户管理”、“封号系统”等页面，现在先留空
         ]
@@ -53,6 +92,22 @@ const router = createRouter({
 // 路由守卫：每次准备跳转前，进度条开始
 router.beforeEach((to, from) => {
     NProgress.start()
+
+    const user = getStoredUser()
+    const isLoggedIn = Boolean(user?.token)
+
+    if (to.path === '/login' && isLoggedIn) {
+        return isAdmin(user) ? '/admin' : '/main/community'
+    }
+
+    if (to.meta.requiresAuth && !isLoggedIn) {
+        return '/login'
+    }
+
+    if (to.meta.requiresAdmin && !isAdmin(user)) {
+        return '/main/community'
+    }
+
     return true
 })
 

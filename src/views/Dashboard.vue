@@ -2,28 +2,30 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { Setting } from '@element-plus/icons-vue'
+import { clearStoredUser, getStoredUser } from '../api'
 
 const router = useRouter()
 const currentUser = ref({ uid: null, username: '', avatar: '' })
 
 onMounted(() => {
-  const userStr = localStorage.getItem('user')
-  if (!userStr) {
+  const user = getStoredUser()
+  if (!user) {
     router.push('/login')
   } else {
-    currentUser.value = JSON.parse(userStr)
+    currentUser.value = user
   }
 })
 
 const logout = () => {
-  localStorage.removeItem('user')
+  clearStoredUser()
   ElMessage.info('已安全退出')
   router.push('/login')
 }
 
 // 跳转到刚刚新建的资料设置页
 const goToProfile = () => {
-  router.push('/profile')
+  router.push('/main/settings/profile')
 }
 </script>
 

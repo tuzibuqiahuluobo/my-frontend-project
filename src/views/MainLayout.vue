@@ -1,8 +1,8 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-// 引入 Element Plus 图标
-import { ChatDotRound, Setting } from '@element-plus/icons-vue'
+import { clearStoredUser, getStoredUser } from '../api'
+import DynamicMenuItem from '../components/DynamicMenuItem.vue'
 
 const router = useRouter()
 const route = useRoute() // 用来获取当前页面在哪个路由，让菜单高亮对应项
@@ -12,21 +12,59 @@ const isCollapse = ref(true)
 
 const currentUser = ref({ username: '', avatar: '' })
 
+const joinRoutePath = (parentPath, childPath) => {
+  // 子路由如果以 / 开头，说明它本来就是完整路径，不需要再拼父路径。
+  if (childPath.startsWith('/')) {
+    return childPath
+  }
+
+  const cleanParent = parentPath.replace(/\/$/, '')
+  return `${cleanParent}/${childPath}`
+}
+
+const buildMenuTree = (routeList, parentPath = '') => {
+  // 菜单直接从路由配置生成：以后新增页面时，只要给路由 meta.menu = true 即可出现在侧边栏。
+  return routeList
+    .filter(menuRoute => menuRoute.meta?.menu)
+    .map(menuRoute => {
+      const fullPath = joinRoutePath(parentPath, menuRoute.path)
+      const children = menuRoute.children ? buildMenuTree(menuRoute.children, fullPath) : []
+
+      return {
+        index: fullPath,
+        title: menuRoute.meta.title,
+        icon: menuRoute.meta.icon,
+        children
+      }
+    })
+}
+
+const mainMenuItems = computed(() => {
+  // 从当前 router 实例里找到 /main 这条父路由，再把它的 children 转成侧边栏菜单。
+  const mainRoute = router.options.routes.find(item => item.path === '/main')
+  return buildMenuTree(mainRoute?.children || [], '/main')
+})
+
 onMounted(() => {
-  const userStr = localStorage.getItem('user')
-  if (userStr) {
-    currentUser.value = JSON.parse(userStr)
+  const user = getStoredUser()
+  if (user) {
+    currentUser.value = user
   }
 })
 
 // 下拉菜单的点击事件监听（点击个人中心或退出登录）
 const handleCommand = (command) => {
   if (command === 'profile') {
-    router.push('/main/profile')
+    router.push('/main/settings/profile')
   } else if (command === 'logout') {
-    localStorage.removeItem('user')
+    clearStoredUser()
     router.push('/login')
   }
+}
+
+const pageTitle = () => {
+  // 优先读取路由里配置的标题，这样以后新增菜单页面时，顶部标题也会自动同步。
+  return route.meta.title || 'SunShine'
 }
 </script>
 
@@ -47,26 +85,22 @@ const handleCommand = (command) => {
           router
         >
           <div class="logo-zone">
-            <span v-if="!isCollapse">DEVELOPER</span>
-            <span v-else>D</span>
+            <span v-if="!isCollapse">SunShine</span>
+            <span v-else>S</span>
           </div>
-  
-          <el-menu-item index="/main/community">
-            <el-icon><ChatDotRound /></el-icon>
-            <template #title>社区广场</template>
-          </el-menu-item>
-  
-          <el-menu-item index="/main/profile">
-            <el-icon><Setting /></el-icon>
-            <template #title>个人设置</template>
-          </el-menu-item>
+
+          <DynamicMenuItem
+            v-for="item in mainMenuItems"
+            :key="item.index"
+            :item="item"
+          />
         </el-menu>
       </el-aside>
   
       <el-container>
         <el-header class="top-header">
           <div class="header-title">
-            <h3>{{ route.path.includes('community') ? '💬 社区广场' : '⚙️ 个人设置' }}</h3>
+            <h3>{{ pageTitle() }}</h3>
           </div>
           
           <div class="header-user">
