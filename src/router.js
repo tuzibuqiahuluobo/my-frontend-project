@@ -12,6 +12,7 @@ import Welcome from './views/Welcome.vue'
 import AdminLayout from './views/AdminLayout.vue'
 import Community from './views/Community.vue'
 import MainLayout from './views/MainLayout.vue'
+import PostDetail from './views/PostDetail.vue'
 import { getStoredUser, isAdmin } from './api'
 
 
@@ -38,6 +39,13 @@ const routes = [
                     title: '社区广场',
                     icon: 'ChatDotRound',
                     menu: true
+                }
+            },
+            {
+                path: 'community/post/:id',
+                component: PostDetail,
+                meta: {
+                    title: '帖子详情'
                 }
             },
             {

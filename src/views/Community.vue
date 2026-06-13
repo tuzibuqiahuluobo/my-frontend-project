@@ -1,9 +1,13 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ChatDotRound, Star, StarFilled, Delete } from '@element-plus/icons-vue'
 import { apiRequest, getStoredUser, isAdmin } from '../api'
+import TwemojiIcon from '../components/TwemojiIcon.vue'
+import { buildTwemojiCatalog, findTwemojiByCodePoint } from '../utils/twemojiCatalog'
 
+const router = useRouter()
 const posts = ref([])
 const loading = ref(true)
 
@@ -11,6 +15,16 @@ const loading = ref(true)
 const currentUser = ref({ uid: null, username: '匿名', nickname: '', avatar: '', role: 0, token: '' })
 const newPostContent = ref('')
 const isSubmitting = ref(false)
+const emojiPageSize = 40
+const emojiPage = ref(1)
+// 表情数据由 Twemoji 解析器筛选生成，不在页面代码里手动维护一长串 emoji。
+const emojiList = buildTwemojiCatalog()
+const emojiButtonIcon = findTwemojiByCodePoint(0x1F642)
+const emojiPageCount = computed(() => Math.ceil(emojiList.length / emojiPageSize))
+const pagedEmojiList = computed(() => {
+  const start = (emojiPage.value - 1) * emojiPageSize
+  return emojiList.slice(start, start + emojiPageSize)
+})
 
 // 用于绑定每条帖子独立的评论输入框内容，键名是 postId，键值是输入的字符串
 const commentInputs = ref({})
@@ -74,6 +88,16 @@ const submitPost = async () => {
   }
 }
 
+const addEmojiToPost = (emoji) => {
+  // 点击表情时直接追加到输入框末尾，初学阶段这样最直观，也不会打断已有输入内容。
+  newPostContent.value += emoji
+}
+
+const goToPostDetail = (postId) => {
+  // 详情页使用帖子 id 做路由参数，这样刷新页面也能重新向后端读取同一条帖子。
+  router.push(`/main/community/post/${postId}`)
+}
+
 // 发表评论逻辑
 const submitComment = async (postId) => {
   const content = commentInputs.value[postId]?.trim()
@@ -112,7 +136,7 @@ const toggleFavorite = async (post) => {
     // 纯前端丝滑刷新状态，无需重新请求整张表，提升交互体验
     post.is_favorited = data.is_favorited
     if (data.is_favorited) { post.favorite_count++ } 
-    else { post.favorite_count-- }
+    else { post.favorite_count = Math.max(0, post.favorite_count - 1) }
   } catch (error) { ElMessage.error(error.message || '收藏失败') }
 }
 
@@ -182,28 +206,60 @@ const formatDate = (timeString) => {
     <el-card class="publish-card" shadow="never">
       <div class="publish-area">
         <el-avatar :size="45" :src="currentUser.avatar" />
-        <el-input
-          v-model="newPostContent"
-          type="textarea"
-          :autosize="{ minRows: 2, maxRows: 4 }"
-          maxlength="20000"
-          show-word-limit
-          placeholder="有什么新鲜事想和大家分享？（支持回车换行）"
-          class="publish-input"
-        />
-      </div>
+        <div class="publish-main">
+          <el-input
+            v-model="newPostContent"
+            type="textarea"
+            :autosize="{ minRows: 2, maxRows: 4 }"
+            maxlength="20000"
+            show-word-limit
+            placeholder="有什么新鲜事想和大家分享？（支持回车换行）"
+            class="publish-input"
+          />
 
-      <div class="publish-action">
-        <el-button 
-          type="primary" 
-          :loading="isSubmitting" 
-          @click="submitPost" 
-          round
-          size="large"
-          color="#38bdf8"
-        >
-          🚀 立即发布
-        </el-button>
+          <div class="publish-action">
+            <el-popover placement="bottom-start" trigger="click" width="340">
+              <template #reference>
+                <button class="emoji-trigger" type="button" title="添加表情">
+                  <TwemojiIcon :emoji="emojiButtonIcon" />
+                </button>
+              </template>
+              <div class="emoji-panel">
+                <button
+                  v-for="emoji in pagedEmojiList"
+                  :key="emoji"
+                  class="emoji-item"
+                  type="button"
+                  @click="addEmojiToPost(emoji)"
+                >
+                  <TwemojiIcon :emoji="emoji" />
+                </button>
+              </div>
+              <div class="emoji-pagination">
+                <el-pagination
+                  v-model:current-page="emojiPage"
+                  size="small"
+                  layout="prev, pager, next"
+                  :page-size="emojiPageSize"
+                  :total="emojiList.length"
+                  :pager-count="5"
+                />
+                <span class="emoji-page-text">{{ emojiPage }} / {{ emojiPageCount }}</span>
+              </div>
+            </el-popover>
+            <el-button 
+              type="primary" 
+              :loading="isSubmitting" 
+              @click="submitPost" 
+              round
+              size="large"
+              color="#38bdf8"
+              class="publish-button"
+            >
+              立即发布
+            </el-button>
+          </div>
+        </div>
       </div>
     </el-card>
 
@@ -220,7 +276,7 @@ const formatDate = (timeString) => {
           </div>
         </div>
         
-        <div class="post-content">
+        <div class="post-content" @click="goToPostDetail(post.id)">
           {{ post.content }}
         </div>
         
@@ -242,7 +298,7 @@ const formatDate = (timeString) => {
             </div>
 
             <div class="right-actions" v-if="post.username === currentUser.username || isAdmin(currentUser)">
-              <el-button type="danger" link icon="Delete" @click="deletePost(post.id)">
+              <el-button type="danger" link :icon="Delete" @click="deletePost(post.id)">
                 删除
               </el-button>
             </div>
@@ -278,7 +334,7 @@ const formatDate = (timeString) => {
                         v-if="comment.username === currentUser.username || isAdmin(currentUser)"
                         type="danger" 
                         link 
-                        icon="Delete" 
+                        :icon="Delete" 
                         size="small"
                         @click="deleteComment(comment.id)"
                       >
@@ -317,6 +373,12 @@ const formatDate = (timeString) => {
 .publish-area {
   display: flex;
   gap: 15px;
+  align-items: flex-start;
+}
+
+.publish-main {
+  flex: 1;
+  min-width: 0;
 }
 
 .publish-input {
@@ -325,9 +387,74 @@ const formatDate = (timeString) => {
 
 .publish-action {
   display: flex;
-  justify-content: flex-end; /* 按钮靠右 */
+  justify-content: space-between; /* 表情在输入框左侧，发布按钮保持在右侧 */
+  align-items: center;
+  gap: 10px;
   width: 100%;              
   margin-top: 15px;
+}
+
+.emoji-trigger {
+  width: 42px;
+  height: 42px;
+  border: 1px solid #dcdfe6;
+  background: #ffffff;
+  border-radius: 50%;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  box-shadow: 0 2px 8px rgba(31, 41, 55, 0.08);
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
+}
+
+.emoji-trigger:hover {
+  border-color: #38bdf8;
+  box-shadow: 0 4px 12px rgba(56, 189, 248, 0.22);
+  transform: translateY(-1px);
+}
+
+.publish-button {
+  min-width: 96px;
+  height: 42px;
+}
+
+.emoji-panel {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 6px;
+}
+
+.emoji-item {
+  border: none;
+  background: #f5f7fa;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 21px;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.15s, transform 0.15s;
+}
+
+.emoji-item:hover {
+  background: #e0f2fe;
+  transform: scale(1.08);
+}
+
+.emoji-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+}
+
+.emoji-page-text {
+  font-size: 12px;
+  color: #909399;
 }
 
 /* ==================== 
@@ -368,6 +495,7 @@ const formatDate = (timeString) => {
   line-height: 1.6;
   margin-bottom: 15px;
   white-space: pre-wrap;
+  cursor: pointer;
 }
 
 /* ==================== 

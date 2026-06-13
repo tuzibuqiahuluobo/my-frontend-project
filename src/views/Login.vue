@@ -26,6 +26,17 @@ const code = ref('')
 const countdown = ref(0)
 let timer = null // 用来装定时器的盒子
 
+// 找回账号/密码弹窗相关状态，单独放在一个对象里，避免和注册表单混在一起。
+const recoverDialogVisible = ref(false)
+const recoverMode = ref('account')
+const recoverEmail = ref('')
+const recoverCode = ref('')
+const recoverNewPassword = ref('')
+const recoverResult = ref('')
+const recoverLoading = ref(false)
+const recoverCountdown = ref(0)
+let recoverTimer = null
+
 // 发送验证码的函数
 const sendCode = async () => {
   // 1. 简单的邮箱格式校验
@@ -58,6 +69,85 @@ const sendCode = async () => {
     ElMessage.error(error.message || '网络错误，请检查后端是否启动')
     countdown.value = 0
     clearInterval(timer)
+  }
+}
+
+const openRecoverDialog = (mode) => {
+  recoverMode.value = mode
+  recoverDialogVisible.value = true
+  recoverEmail.value = ''
+  recoverCode.value = ''
+  recoverNewPassword.value = ''
+  recoverResult.value = ''
+}
+
+const sendRecoverCode = async () => {
+  if (!recoverEmail.value) {
+    ElMessage.warning('请先填写绑定邮箱')
+    return
+  }
+  if (!recoverEmail.value.endsWith('@qq.com') && !recoverEmail.value.endsWith('@gmail.com')) {
+    ElMessage.warning('目前仅支持 QQ 或 Gmail 邮箱哦')
+    return
+  }
+
+  // 找回流程也使用倒计时，避免用户频繁点击发送验证码。
+  recoverCountdown.value = 60
+  recoverTimer = setInterval(() => {
+    recoverCountdown.value--
+    if (recoverCountdown.value <= 0) {
+      clearInterval(recoverTimer)
+    }
+  }, 1000)
+
+  try {
+    const data = await apiRequest('/api/send-code', {
+      method: 'POST',
+      body: JSON.stringify({ email: recoverEmail.value })
+    })
+    ElMessage.success(data.message)
+  } catch (error) {
+    ElMessage.error(error.message || '验证码发送失败')
+    recoverCountdown.value = 0
+    clearInterval(recoverTimer)
+  }
+}
+
+const submitRecover = async () => {
+  if (!recoverEmail.value || !recoverCode.value) {
+    ElMessage.warning('邮箱和验证码不能为空')
+    return
+  }
+  if (recoverMode.value === 'password' && !recoverNewPassword.value) {
+    ElMessage.warning('请填写新密码')
+    return
+  }
+
+  recoverLoading.value = true
+  try {
+    const url = recoverMode.value === 'account' ? '/api/recover-account' : '/api/reset-password'
+    const data = await apiRequest(url, {
+      method: 'POST',
+      body: JSON.stringify({
+        email: recoverEmail.value,
+        code: recoverCode.value,
+        new_password: recoverNewPassword.value
+      })
+    })
+
+    if (recoverMode.value === 'account') {
+      recoverResult.value = `你的登录账号是：${data.username}`
+      username.value = data.username
+    } else {
+      recoverResult.value = data.message
+      recoverDialogVisible.value = false
+      isLoginMode.value = true
+    }
+    ElMessage.success(data.message)
+  } catch (error) {
+    ElMessage.error(error.message || '找回失败，请稍后再试')
+  } finally {
+    recoverLoading.value = false
   }
 }
 
@@ -212,6 +302,10 @@ const submitForm = async () => {
         >
           {{ isLoginMode ? '没有账号？点我注册' : '已有账号？返回登录' }}
         </el-button>
+        <div v-if="isLoginMode && !isAdminMode" style="margin-top: 8px;">
+          <el-button type="info" link @click="openRecoverDialog('account')">忘记账号</el-button>
+          <el-button type="info" link @click="openRecoverDialog('password')">忘记密码</el-button>
+        </div>
         
         <el-button 
           v-else
@@ -224,5 +318,44 @@ const submitForm = async () => {
       </div>
 
     </el-card>
+
+    <el-dialog
+      v-model="recoverDialogVisible"
+      :title="recoverMode === 'account' ? '找回账号' : '重置密码'"
+      width="420px"
+      align-center
+    >
+      <el-input v-model="recoverEmail" placeholder="请输入绑定邮箱" clearable size="large" style="margin-bottom: 15px;">
+        <template #prefix><el-icon><Message /></el-icon></template>
+      </el-input>
+
+      <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+        <el-input v-model="recoverCode" placeholder="请输入验证码" size="large" style="flex-grow: 1;" />
+        <el-button size="large" type="primary" plain :disabled="recoverCountdown > 0" @click="sendRecoverCode" style="width: 120px;">
+          {{ recoverCountdown > 0 ? `${recoverCountdown}s` : '获取验证码' }}
+        </el-button>
+      </div>
+
+      <el-input
+        v-if="recoverMode === 'password'"
+        v-model="recoverNewPassword"
+        type="password"
+        placeholder="请输入新密码（至少 6 位）"
+        show-password
+        size="large"
+        style="margin-bottom: 15px;"
+      >
+        <template #prefix><el-icon><Lock /></el-icon></template>
+      </el-input>
+
+      <el-alert v-if="recoverResult" :title="recoverResult" type="success" show-icon :closable="false" style="margin-bottom: 15px;" />
+
+      <template #footer>
+        <el-button @click="recoverDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="recoverLoading" @click="submitRecover">
+          {{ recoverMode === 'account' ? '找回账号' : '确认重置' }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>

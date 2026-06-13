@@ -2,46 +2,157 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { apiRequest, clearStoredUser } from '../api'
+import 'vue-cropper/dist/index.css'
+import { VueCropper } from 'vue-cropper'
+import {
+  ChatDotRound,
+  Grid,
+  Lock,
+  Message,
+  SwitchButton,
+  User,
+  UserFilled
+} from '@element-plus/icons-vue'
+import { apiRequest, clearStoredUser, getStoredUser, saveStoredUser } from '../api'
 
 const router = useRouter()
-const activeTab = ref('users') // 默认选中的标签页
-
-// 数据存储箱
-const userList = ref([])
-const postList = ref([])
+const activeTab = ref('overview')
 const loading = ref(false)
 
-// 1. 获取全量用户数据
+const currentAdmin = ref({ uid: null, username: '', nickname: '', avatar: '', email: '', role: 2, token: '' })
+const userList = ref([])
+const postList = ref([])
+
+const adminForm = ref({
+  username: '',
+  email: '',
+  avatar: '',
+  password: '',
+  currentPassword: ''
+})
+const savingAdmin = ref(false)
+const fileInputRef = ref(null)
+const cropDialogVisible = ref(false)
+const cropperRef = ref(null)
+const rawImageUrl = ref('')
+
+const syncAdminForm = (user) => {
+  // 表单和 localStorage 分开存，避免输入框未保存时就污染当前登录态。
+  adminForm.value.username = user.username || ''
+  adminForm.value.email = user.email || ''
+  adminForm.value.avatar = user.avatar || ''
+  adminForm.value.password = ''
+  adminForm.value.currentPassword = ''
+}
+
+const loadCurrentAdmin = () => {
+  const user = getStoredUser()
+  if (!user) {
+    router.push('/login')
+    return
+  }
+  currentAdmin.value = user
+  syncAdminForm(user)
+}
+
 const fetchAllUsers = async () => {
   loading.value = true
   try {
     userList.value = await apiRequest('/api/users')
   } catch (error) {
-    ElMessage.error(error.message || '无法同步全球用户数据')
+    ElMessage.error(error.message || '用户数据读取失败')
   } finally {
     loading.value = false
   }
 }
 
-// 2. 获取全量帖子数据
 const fetchAllPosts = async () => {
   loading.value = true
   try {
     postList.value = await apiRequest('/api/posts')
   } catch (error) {
-    ElMessage.error(error.message || '无法同步社区广播数据')
+    ElMessage.error(error.message || '帖子数据读取失败')
   } finally {
     loading.value = false
   }
 }
 
-// 3. 强制注销用户
+const saveAdminProfile = async () => {
+  if (!adminForm.value.currentPassword) {
+    ElMessage.warning('请输入当前密码后再保存')
+    return
+  }
+
+  savingAdmin.value = true
+  try {
+    const data = await apiRequest('/api/update-admin-profile', {
+      method: 'POST',
+      body: JSON.stringify({
+        username: adminForm.value.username,
+        email: adminForm.value.email,
+        avatar: adminForm.value.avatar,
+        password: adminForm.value.password,
+        current_password: adminForm.value.currentPassword
+      })
+    })
+
+    const nextAdmin = {
+      uid: data.uid,
+      username: data.username,
+      nickname: data.nickname,
+      avatar: data.avatar,
+      email: data.email,
+      role: data.role,
+      token: data.token
+    }
+    currentAdmin.value = nextAdmin
+    saveStoredUser(nextAdmin)
+    syncAdminForm(nextAdmin)
+    ElMessage.success(data.message)
+    fetchAllUsers()
+  } catch (error) {
+    ElMessage.error(error.message || '管理员资料保存失败')
+  } finally {
+    savingAdmin.value = false
+  }
+}
+
+const triggerAvatarUpload = () => {
+  fileInputRef.value.click()
+}
+
+const onAvatarSelected = (event) => {
+  const file = event.target.files[0]
+  if (!file) return
+
+  if (file.size > 2 * 1024 * 1024) {
+    ElMessage.error('图片太大啦！请上传 2MB 以内的图片。')
+    return
+  }
+
+  // FileReader 会把本地图片转成浏览器可预览的 base64，裁剪器需要这个格式来显示图片。
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    rawImageUrl.value = e.target.result
+    cropDialogVisible.value = true
+  }
+  reader.readAsDataURL(file)
+  event.target.value = ''
+}
+
+const confirmAvatarCrop = () => {
+  if (!cropperRef.value) return
+  cropperRef.value.getCropData((data) => {
+    adminForm.value.avatar = data
+    cropDialogVisible.value = false
+  })
+}
+
 const terminateUser = (uid, username) => {
   ElMessageBox.confirm(
-    `确定要永久抹除用户 [${username}] 吗？该操作将清除其所有数据凭证！`,
-    '⚠️ 最高警告',
-    { confirmButtonText: '强制执行', cancelButtonText: '暂缓执行', type: 'error' }
+    `确定要永久删除用户 [${username}] 吗？`,
+    '删除用户',
+    { confirmButtonText: '确认删除', cancelButtonText: '取消', type: 'warning' }
   ).then(async () => {
     try {
       const data = await apiRequest('/api/delete-user', {
@@ -49,19 +160,18 @@ const terminateUser = (uid, username) => {
         body: JSON.stringify({ target_uid: uid })
       })
       ElMessage.success(data.message)
-      fetchAllUsers() // 刷新用户仓
+      fetchAllUsers()
     } catch (error) {
-      ElMessage.error(error.message || '指令发送失败')
+      ElMessage.error(error.message || '删除失败')
     }
   })
 }
 
-// 4. 强制删除任何帖子
 const obliteratePost = (postId) => {
   ElMessageBox.confirm(
-    '确认要抹除这条社区动态吗？',
-    '提示',
-    { confirmButtonText: '强制删除任何帖子', cancelButtonText: '保留', type: 'warning' }
+    '确认删除这条社区动态吗？',
+    '删除帖子',
+    { confirmButtonText: '确认删除', cancelButtonText: '取消', type: 'warning' }
   ).then(async () => {
     try {
       const data = await apiRequest('/api/delete-post', {
@@ -69,194 +179,536 @@ const obliteratePost = (postId) => {
         body: JSON.stringify({ post_id: postId })
       })
       ElMessage.success(data.message)
-      fetchAllPosts() // 刷新帖子仓
+      fetchAllPosts()
     } catch (error) {
-      ElMessage.error(error.message || '清除失败')
+      ElMessage.error(error.message || '删除失败')
     }
   })
 }
 
-// 退出后台回到普通用户登录界面
 const exitCommandCenter = () => {
   clearStoredUser()
   router.push('/login')
 }
 
-// 标签页切换时自动加载对应的数据
 const handleTabClick = () => {
   if (activeTab.value === 'users') fetchAllUsers()
   if (activeTab.value === 'posts') fetchAllPosts()
 }
 
 onMounted(() => {
-  fetchAllUsers() // 初始化进来先拉取用户数据
+  loadCurrentAdmin()
+  fetchAllUsers()
+  fetchAllPosts()
 })
 </script>
 
 <template>
   <div class="admin-dashboard">
-    <header class="admin-header">
-      <div class="header-left">
-        <span class="pulse-dot"></span>
-        <h2>SunShine 管理中心 <span class="version-tag">SYSTEM OVERRIDE v1.0</span></h2>
+    <aside class="admin-sidebar">
+      <div class="brand-block">
+        <img src="/sunshine-icon.jpg" alt="SunShine" class="brand-logo">
+        <div>
+          <h2>SunShine</h2>
+          <p>Admin Console</p>
+        </div>
       </div>
-      <el-button type="danger" plain size="small" @click="exitCommandCenter">
-        退出控制台
+
+      <div class="admin-profile-card">
+        <el-avatar :size="64" :src="currentAdmin.avatar" />
+        <strong>{{ currentAdmin.username }}</strong>
+        <span>{{ currentAdmin.email || '未绑定邮箱' }}</span>
+      </div>
+
+      <el-menu v-model:default-active="activeTab" class="admin-menu" @select="activeTab = $event; handleTabClick()">
+        <el-menu-item index="overview">
+          <el-icon><Grid /></el-icon>
+          <template #title>概览</template>
+        </el-menu-item>
+        <el-menu-item index="profile">
+          <el-icon><User /></el-icon>
+          <template #title>管理员资料</template>
+        </el-menu-item>
+        <el-menu-item index="users">
+          <el-icon><UserFilled /></el-icon>
+          <template #title>用户管理</template>
+        </el-menu-item>
+        <el-menu-item index="posts">
+          <el-icon><ChatDotRound /></el-icon>
+          <template #title>动态管理</template>
+        </el-menu-item>
+      </el-menu>
+
+      <el-button class="logout-button" type="danger" plain :icon="SwitchButton" @click="exitCommandCenter">
+        退出后台
       </el-button>
-    </header>
+    </aside>
 
     <main class="admin-main">
-      <el-tabs v-model="activeTab" @tab-click="handleTabClick" type="card" class="custom-tabs">
-        
-        <el-tab-pane label="👤 全局用户矩阵" name="users">
-          <el-table :data="userList" v-loading="loading" style="width: 100%" class="dark-table">
-            <el-table-column prop="uid" label="UID" width="80" />
-            <el-table-column label="头像" width="100">
-              <template #default="scope">
-                <el-avatar :size="30" :src="scope.row.avatar" />
-              </template>
-            </el-table-column>
-            <el-table-column prop="username" label="管理员/用户代号" />
-            <el-table-column prop="email" label="安全邮箱" />
-            <el-table-column label="权限安全等级">
-              <template #default="scope">
-                <el-tag :type="scope.row.role === 2 ? 'danger' : 'info'" effect="dark">
-                  {{ scope.row.role === 2 ? 'Level 2 超级管理员' : 'Level 0 普通用户' }}
-                </el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column label="终极操作" width="150">
-              <template #default="scope">
-                <el-button 
-                  v-if="scope.row.username !== '超级管理员'"
-                  type="danger" 
-                  size="small" 
-                  @click="terminateUser(scope.row.uid, scope.row.username)"
-                >
-                  强制注销
-                </el-button>
-                <span v-else class="self-text">本人安全锁</span>
-              </template>
-            </el-table-column>
-          </el-table>
-        </el-tab-pane>
+      <header class="content-header">
+        <div>
+          <span class="eyebrow">SunShine 管理中心</span>
+          <h1>{{ activeTab === 'overview' ? '后台概览' : activeTab === 'profile' ? '管理员资料' : activeTab === 'users' ? '用户管理' : '动态管理' }}</h1>
+        </div>
+      </header>
 
-        <el-tab-pane label="💬 社区广播广场" name="posts">
-          <el-table :data="postList" v-loading="loading" style="width: 100%" class="dark-table">
-            <el-table-column prop="id" label="帖子ID" width="90" />
-            <el-table-column prop="username" label="发布者" width="150" />
-            <el-table-column prop="content" label="广播正文" show-overflow-tooltip />
-            <el-table-column label="时间" width="180">
-              <template #default="scope">
-                {{ new Date(scope.row.created_at).toLocaleString() }}
-              </template>
-            </el-table-column>
-            <el-table-column label="操作" width="120">
-              <template #default="scope">
-                <el-button type="warning" size="small" @click="obliteratePost(scope.row.id)">
-                  违规抹除
-                </el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-        </el-tab-pane>
+      <section class="summary-grid">
+        <div class="summary-card primary">
+          <div class="summary-icon"><el-icon><UserFilled /></el-icon></div>
+          <div>
+            <span>用户总数</span>
+            <strong>{{ userList.length }}</strong>
+          </div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-icon"><el-icon><ChatDotRound /></el-icon></div>
+          <div>
+            <span>动态总数</span>
+            <strong>{{ postList.length }}</strong>
+          </div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-icon"><el-icon><Message /></el-icon></div>
+          <div>
+            <span>管理员邮箱</span>
+            <strong>{{ currentAdmin.email || '未记录' }}</strong>
+          </div>
+        </div>
+      </section>
 
-      </el-tabs>
+      <section class="workspace">
+        <div v-if="activeTab === 'overview'" class="panel overview-panel">
+          <div class="overview-copy">
+            <h3>站点运行概览</h3>
+            <p>这里集中展示用户、社区动态和管理员资料状态。左侧导航用于快速切换后台模块。</p>
+          </div>
+          <div class="overview-list">
+            <div>
+              <span>当前管理员</span>
+              <strong>{{ currentAdmin.username }}</strong>
+            </div>
+            <div>
+              <span>权限等级</span>
+              <strong>超级管理员</strong>
+            </div>
+            <div>
+              <span>可执行操作</span>
+              <strong>用户管理 / 动态管理 / 资料维护</strong>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="activeTab === 'profile'" class="panel profile-panel">
+          <div class="profile-preview">
+            <el-tooltip content="点击更换头像" placement="top">
+              <div class="avatar-edit-trigger" @click="triggerAvatarUpload">
+                <el-avatar :size="88" :src="adminForm.avatar" />
+                <span>更换头像</span>
+              </div>
+            </el-tooltip>
+            <h3>{{ adminForm.username || '超级管理员' }}</h3>
+            <p>{{ adminForm.email || '未填写邮箱' }}</p>
+            <input ref="fileInputRef" type="file" accept="image/*" style="display: none;" @change="onAvatarSelected">
+          </div>
+          <div class="panel">
+            <h3>修改超级管理员资料</h3>
+            <el-form label-width="100px" class="admin-form">
+              <el-form-item label="账号">
+                <el-input v-model="adminForm.username" :prefix-icon="User" placeholder="请输入管理员账号" />
+              </el-form-item>
+              <el-form-item label="邮箱">
+                <el-input v-model="adminForm.email" :prefix-icon="Message" placeholder="请输入管理员邮箱" />
+              </el-form-item>
+              <el-form-item label="新密码">
+                <el-input v-model="adminForm.password" :prefix-icon="Lock" type="password" show-password placeholder="不修改请留空" />
+              </el-form-item>
+              <el-form-item label="当前密码">
+                <el-input v-model="adminForm.currentPassword" :prefix-icon="Lock" type="password" show-password placeholder="保存前必须输入当前密码" />
+              </el-form-item>
+              <el-form-item>
+                <el-button type="primary" :loading="savingAdmin" @click="saveAdminProfile">保存管理员资料</el-button>
+              </el-form-item>
+            </el-form>
+          </div>
+        </div>
+
+        <div v-if="activeTab === 'users'" class="panel">
+          <div class="section-title">
+            <h3>用户列表</h3>
+            <span>{{ userList.length }} 个账号</span>
+          </div>
+          <div class="panel">
+            <el-table :data="userList" v-loading="loading" style="width: 100%">
+              <el-table-column prop="uid" label="UID" width="80" />
+              <el-table-column label="头像" width="90">
+                <template #default="scope">
+                  <el-avatar :size="32" :src="scope.row.avatar" />
+                </template>
+              </el-table-column>
+              <el-table-column prop="username" label="账号" />
+              <el-table-column prop="email" label="邮箱" />
+              <el-table-column label="角色" width="140">
+                <template #default="scope">
+                  <el-tag :type="scope.row.role === 2 ? 'danger' : 'info'">
+                    {{ scope.row.role === 2 ? '超级管理员' : '普通用户' }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="130">
+                <template #default="scope">
+                  <el-button
+                    v-if="scope.row.uid !== currentAdmin.uid && scope.row.role !== 2"
+                    type="danger"
+                    size="small"
+                    plain
+                    @click="terminateUser(scope.row.uid, scope.row.username)"
+                  >
+                    删除用户
+                  </el-button>
+                  <span v-else class="safe-text">受保护</span>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+        </div>
+
+        <div v-if="activeTab === 'posts'" class="panel">
+          <div class="section-title">
+            <h3>社区动态</h3>
+            <span>{{ postList.length }} 条内容</span>
+          </div>
+          <div class="panel">
+            <el-table :data="postList" v-loading="loading" style="width: 100%">
+              <el-table-column prop="id" label="ID" width="80" />
+              <el-table-column prop="username" label="发布者" width="150" />
+              <el-table-column prop="content" label="内容" show-overflow-tooltip />
+              <el-table-column label="时间" width="180">
+                <template #default="scope">
+                  {{ new Date(scope.row.created_at).toLocaleString() }}
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="120">
+                <template #default="scope">
+                  <el-button type="warning" size="small" plain @click="obliteratePost(scope.row.id)">
+                    删除动态
+                  </el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+        </div>
+      </section>
     </main>
+
+    <el-dialog v-model="cropDialogVisible" title="裁剪管理员头像" width="500px" align-center destroy-on-close>
+      <div style="height: 300px; width: 100%;">
+        <vue-cropper
+          ref="cropperRef"
+          :img="rawImageUrl"
+          :autoCrop="true"
+          :autoCropWidth="200"
+          :autoCropHeight="200"
+          :fixedBox="true"
+          :infoTrue="true"
+          outputType="png"
+        />
+      </div>
+      <template #footer>
+        <el-button @click="cropDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="confirmAvatarCrop">确认裁剪</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <style scoped>
-
 .admin-dashboard {
-  width: 100vw;
-  height: 100vh;
-  background-color: #141414; 
-  color: #e5e7eb;
-  font-family: 'Courier New', Courier, monospace; 
+  min-height: 100vh;
+  background: #f4f7fb;
+  color: #303133;
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+}
+
+.admin-sidebar {
+  min-height: 100vh;
+  background: #ffffff;
+  border-right: 1px solid #e5eaf3;
+  padding: 24px 18px;
   display: flex;
   flex-direction: column;
+  gap: 18px;
 }
 
-.admin-header {
-  height: 60px;
-  background-color: #1f1f1f;
-  border-bottom: 2px solid #ff4d4f; /* 标志性的危险红警示线 */
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0 25px;
-}
-
-.header-left {
+.brand-block {
   display: flex;
   align-items: center;
-  gap: 15px;
+  gap: 14px;
 }
 
-.header-left h2 {
+.brand-block h2 {
   margin: 0;
-  font-size: 18px;
-  color: #ff4d4f;
-  letter-spacing: 2px;
+  font-size: 19px;
+  color: #1f2d3d;
 }
 
-.version-tag {
-  font-size: 11px;
-  color: #8c8c8c;
-  margin-left: 10px;
+.brand-block p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #909399;
 }
 
-/* 呼吸灯特效点缀 */
-.pulse-dot {
-  width: 10px;
-  height: 10px;
-  background-color: #52c41a;
-  border-radius: 50%;
-  box-shadow: 0 0 10px #52c41a;
-  animation: pulse 2s infinite;
+.brand-logo {
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
+  object-fit: cover;
 }
 
-@keyframes pulse {
-  0% { transform: scale(0.9); opacity: 0.6; }
-  50% { transform: scale(1.1); opacity: 1; box-shadow: 0 0 15px #52c41a; }
-  100% { transform: scale(0.9); opacity: 0.6; }
+.admin-profile-card {
+  border: 1px solid #e5eaf3;
+  border-radius: 8px;
+  padding: 18px;
+  background: #f8fbff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.admin-profile-card strong {
+  font-size: 16px;
+}
+
+.admin-profile-card span {
+  font-size: 12px;
+  color: #909399;
+  word-break: break-all;
+}
+
+.admin-menu {
+  border-right: none;
+}
+
+.logout-button {
+  margin-top: auto;
 }
 
 .admin-main {
-  flex-grow: 1;
-  padding: 25px;
-  overflow-y: auto;
+  padding: 30px;
+  overflow: auto;
 }
 
-.self-text {
-  font-size: 12px;
-  color: #52c41a;
+.content-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: 22px;
 }
 
-/* 强行深度覆写 Element Plus 的样式，让其契合暗黑风 */
-:deep(.el-tabs__item) {
-  color: #a6a6a6 !important;
+.eyebrow {
+  color: #409eff;
+  font-size: 13px;
+  font-weight: 600;
 }
-:deep(.el-tabs__item.is-active) {
-  color: #ff4d4f !important;
-  background-color: #1f1f1f !important;
-  border-bottom-color: #141414 !important;
+
+.content-header h1 {
+  margin: 6px 0 0;
+  font-size: 28px;
+  color: #1f2d3d;
 }
-:deep(.el-table) {
-  background-color: #1f1f1f !important;
-  color: #e5e7eb !important;
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 22px;
 }
-:deep(.el-table th.el-table__cell) {
-  background-color: #262626 !important;
-  color: #ff4d4f !important;
-  border-bottom: 1px solid #434343 !important;
+
+.summary-card {
+  background: #ffffff;
+  border: 1px solid #e5eaf3;
+  border-radius: 8px;
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  box-shadow: 0 10px 28px rgba(31, 45, 61, 0.05);
 }
-:deep(.el-table td.el-table__cell) {
-  background-color: #1f1f1f !important;
-  border-bottom: 1px solid #262626 !important;
+
+.summary-card.primary {
+  border-color: #b3d8ff;
 }
-:deep(.el-table--enable-row-hover .el-table__body tr:hover>td.el-table__cell) {
-  background-color: #262626 !important;
+
+.summary-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 8px;
+  background: #ecf5ff;
+  color: #409eff;
+  display: grid;
+  place-items: center;
+  font-size: 24px;
+}
+
+.summary-card span {
+  display: block;
+  font-size: 13px;
+  color: #909399;
+  margin-bottom: 6px;
+}
+
+.summary-card strong {
+  font-size: 20px;
+  color: #303133;
+  word-break: break-all;
+}
+
+.workspace {
+  background: #ffffff;
+  border: 1px solid #e5eaf3;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 12px 32px rgba(31, 45, 61, 0.06);
+}
+
+.overview-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+  gap: 20px;
+}
+
+.overview-copy {
+  background: #f8fbff;
+  border: 1px solid #e5eaf3;
+  border-radius: 8px;
+  padding: 22px;
+}
+
+.overview-list {
+  border: 1px solid #e5eaf3;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.overview-list div {
+  padding: 16px;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid #edf2f7;
+}
+
+.overview-list div:last-child {
+  border-bottom: none;
+}
+
+.overview-list span {
+  color: #909399;
+  font-size: 13px;
+}
+
+.overview-list strong {
+  color: #303133;
+  font-size: 14px;
+  text-align: right;
+}
+
+.profile-panel {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 24px;
+}
+
+.profile-preview {
+  border: 1px solid #e5eaf3;
+  border-radius: 8px;
+  background: #f8fbff;
+  padding: 24px;
+  text-align: center;
+}
+
+.profile-preview h3 {
+  margin: 14px 0 6px;
+}
+
+.profile-preview p {
+  margin: 0;
+  color: #909399;
+  font-size: 13px;
+  word-break: break-all;
+}
+
+.avatar-edit-trigger {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.avatar-edit-trigger span {
+  color: #409eff;
+  font-size: 13px;
+}
+
+.panel h3 {
+  margin: 0 0 16px;
+  font-size: 18px;
+}
+
+.panel p {
+  margin: 0;
+  color: #606266;
+  line-height: 1.7;
+}
+
+.admin-form {
+  max-width: 680px;
+}
+
+.section-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.section-title h3 {
+  margin: 0;
+}
+
+.section-title span {
+  color: #909399;
+  font-size: 13px;
+}
+
+.safe-text {
+  color: #909399;
+  font-size: 13px;
+}
+
+@media (max-width: 760px) {
+  .admin-dashboard {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-sidebar {
+    min-height: auto;
+  }
+
+  .summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-main {
+    padding: 16px;
+  }
+
+  .overview-panel,
+  .profile-panel {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

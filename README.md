@@ -2,7 +2,7 @@
 
 > Languages: [中文](README.zh-CN.md) / English
 
-A Vue 3 frontend for the Go backend. It currently includes login/register, a welcome page, community posts, profile editing, avatar cropping, and a super-admin dashboard.
+A Vue 3 frontend for the Go backend. It currently includes login/register, email recovery flows, a welcome page, community posts, Twemoji reactions, post details, personal favorites, profile editing, avatar cropping, and a super-admin dashboard.
 
 ## Key Facts
 
@@ -11,6 +11,7 @@ A Vue 3 frontend for the Go backend. It currently includes login/register, a wel
 - Router: Vue Router
 - API wrapper: `src/api.js`
 - Avatar cropping: vue-cropper
+- Emoji rendering: `twemoji`
 
 ## Quick Start
 
@@ -61,8 +62,9 @@ npm run preview
 | `/login` | Login / register | Public |
 | `/welcome` | Welcome page | Requires login |
 | `/main/community` | Community | Requires login |
+| `/main/community/post/:id` | Post detail | Requires login |
 | `/main/settings/profile` | Profile settings | Requires login |
-| `/main/dashboard` | Personal dashboard | Requires login |
+| `/main/dashboard` | Personal dashboard, creative space, and favorites | Requires login |
 | `/admin` | Super-admin dashboard | Requires login and `role = 2` |
 
 Compatibility note: the old `/main/profile` path redirects to `/main/settings/profile`.
@@ -84,17 +86,22 @@ This keeps page components simpler because they can call `apiRequest()` instead 
 | Method | Path | Purpose |
 |--------|------|---------|
 | `POST` | `/api/send-code` | Send registration verification code |
+| `POST` | `/api/recover-account` | Recover username by email verification code |
+| `POST` | `/api/reset-password` | Reset password by email verification code |
 | `POST` | `/api/register` | Register |
 | `POST` | `/api/login` | Login |
 | `POST` | `/api/update` | Update profile |
 | `GET` | `/api/posts` | List posts |
+| `GET` | `/api/post-detail?id=<id>` | Read one post with comments |
 | `POST` | `/api/create-post` | Create post |
 | `POST` | `/api/delete-post` | Delete post |
 | `POST` | `/api/create-comment` | Create comment |
 | `POST` | `/api/delete-comment` | Delete comment |
 | `POST` | `/api/toggle-favorite` | Favorite / unfavorite |
+| `GET` | `/api/my-favorites` | List current user's favorite posts |
 | `GET` | `/api/users` | Admin user list |
 | `POST` | `/api/delete-user` | Admin delete user |
+| `POST` | `/api/update-admin-profile` | Update super-admin username, password, avatar, or email |
 
 ## Project Layout
 
@@ -103,6 +110,8 @@ my-frontend/
 ├─ public/
 ├─ src/
 │  ├─ assets/
+│  ├─ components/
+│  ├─ utils/
 │  ├─ views/
 │  ├─ api.js
 │  ├─ App.vue
@@ -116,7 +125,7 @@ my-frontend/
 
 ## Development Notes
 
-- The visual UI and page styles were not changed by this documentation update.
+- The community post editor uses Twemoji for the emoji picker. The picker list is generated from Unicode ranges and filtered by `twemoji-parser`, then paginated in the UI.
 - If your terminal says `npm` cannot be found, Node/npm is not available in the current PATH.
 - The admin entry is hidden in the login page UI, but real permission is still enforced by the backend through `role = 2`.
 
