@@ -136,3 +136,19 @@ This is a learning project. No license file has been added yet.
 ## AI Attribution
 
 Approximately 70% of this project was written with AI assistance.
+
+## Production Deployment
+
+Before building for production, copy and edit the production environment template:
+
+```bash
+cp .env.production.example .env.production
+```
+
+Set `VITE_API_BASE_URL` to your HTTPS domain, for example:
+
+```text
+VITE_API_BASE_URL=https://example.com
+```
+
+The full Alibaba Cloud deployment guide is available in the backend repository at `deploy/README.zh-CN.md`.

@@ -3,10 +3,10 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { MagicStick, Setting, StarFilled } from '@element-plus/icons-vue'
-import { apiRequest, clearStoredUser, getStoredUser } from '../api'
+import { apiRequest, clearStoredUser, getStoredUser, saveStoredUser } from '../api'
 
 const router = useRouter()
-const currentUser = ref({ uid: null, username: '', avatar: '' })
+const currentUser = ref({ uid: null, username: '', nickname: '', signature: '', avatar: '' })
 // 收藏列表单独放在个人中心里，避免和社区广场的帖子列表互相影响。
 const favoritePosts = ref([])
 // 加载状态用于显示骨架屏，让用户知道“我的收藏”正在读取数据。
@@ -18,9 +18,22 @@ onMounted(() => {
     router.push('/login')
   } else {
     currentUser.value = user
+    refreshCurrentUser()
     loadFavoritePosts()
   }
 })
+
+const refreshCurrentUser = async () => {
+  try {
+    const freshUser = await apiRequest('/api/me')
+    // 后端返回的是最新资料，token 仍然沿用本地保存的 token，避免刷新后丢登录态。
+    currentUser.value = { ...currentUser.value, ...freshUser, token: currentUser.value.token }
+    saveStoredUser(currentUser.value)
+  } catch (error) {
+    // 刷新资料失败时不影响页面打开，下面收藏列表会继续用原来的登录态请求。
+    console.warn('刷新当前用户资料失败', error)
+  }
+}
 
 const logout = () => {
   clearStoredUser()
@@ -82,20 +95,21 @@ const postPreview = (content) => {
 </script>
 
 <template>
-  <div style="background-color: #f0f2f5; min-height: 100vh; padding: 40px 20px;">
-    <div style="max-width: 900px; margin: 0 auto;">
+  <div class="dashboard-page">
+    <div class="dashboard-inner">
       
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
-        <h1 style="margin: 0; color: #303133;">个人中心</h1>
+      <div class="dashboard-header">
+        <h1 class="page-title">个人中心</h1>
         <el-button type="danger" plain @click="logout">退出登录</el-button>
       </div>
 
-      <el-card shadow="never" style="border-radius: 12px; margin-bottom: 30px;">
-        <div style="display: flex; align-items: center;">
-          <el-avatar :src="currentUser.avatar" :size="80" style="border: 2px solid #eee; margin-right: 30px;" />
-          <div style="flex-grow: 1;">
-            <h2 style="margin: 0 0 10px 0; color: #303133;">{{ currentUser.username }}</h2>
-            <p style="margin: 0 0 15px 0; color: #909399; font-size: 14px;">UID: {{ String(currentUser.uid).padStart(5, '0') }}</p>
+      <el-card shadow="never" class="profile-card">
+        <div class="profile-row">
+          <el-avatar :src="currentUser.avatar" :size="80" class="profile-avatar" />
+          <div class="profile-info">
+            <h2 class="profile-name">{{ currentUser.nickname || currentUser.username }}</h2>
+            <p class="profile-signature">{{ currentUser.signature || '这个人还没有写个性签名' }}</p>
+            <p class="profile-uid">UID: {{ String(currentUser.uid).padStart(5, '0') }}</p>
             <div>
               <el-button size="small" round type="primary" plain @click="goToProfile">
                 <el-icon style="margin-right: 5px;"><Setting /></el-icon> 
@@ -110,24 +124,24 @@ const postPreview = (content) => {
         </div>
       </el-card>
 
-      <h3 style="color: #303133; margin-bottom: 20px;">🛠️ 我的创意空间</h3>
+      <h3 class="section-title">🛠️ 我的创意空间</h3>
       <el-empty description="暂无作品喵~" />
 
-      <h3 style="color: #303133; margin: 30px 0 20px;">⭐ 我的收藏</h3>
+      <h3 class="section-title favorite-title">⭐ 我的收藏</h3>
       <el-skeleton v-if="favoritesLoading" :rows="4" animated />
       <el-empty v-else-if="favoritePosts.length === 0" description="还没有收藏任何帖子喵~" />
       <el-row v-else :gutter="20">
         <el-col v-for="post in favoritePosts" :key="post.id" :xs="24" :sm="12" style="margin-bottom: 20px;">
-          <el-card shadow="hover" style="border-radius: 12px; height: 100%; cursor: pointer;" @click="goToPostDetail(post.id)">
+          <el-card shadow="hover" class="favorite-card" @click="goToPostDetail(post.id)">
             <div style="display: flex; align-items: center; margin-bottom: 12px;">
               <el-avatar :size="34" :src="post.avatar" />
               <div style="margin-left: 10px;">
-                <div style="font-weight: bold; color: #303133;">{{ post.nickname || post.username }}</div>
-                <div style="font-size: 12px; color: #909399;">{{ formatDate(post.created_at) }}</div>
+                <div class="favorite-author">{{ post.nickname || post.username }}</div>
+                <div class="favorite-time">{{ formatDate(post.created_at) }}</div>
               </div>
             </div>
-            <p style="color: #606266; font-size: 14px; line-height: 1.7; margin-bottom: 12px;">{{ postPreview(post.content) }}</p>
-            <div style="display: flex; justify-content: space-between; align-items: center; color: #909399; font-size: 12px;">
+            <p class="favorite-preview">{{ postPreview(post.content) }}</p>
+            <div class="favorite-meta">
               <span>评论 {{ post.comments ? post.comments.length : 0 }} · 收藏 {{ post.favorite_count }}</span>
               <el-button type="warning" plain size="small" :icon="StarFilled" @click.stop="toggleFavorite(post)">
                 取消收藏
@@ -140,3 +154,108 @@ const postPreview = (content) => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.dashboard-page {
+  background-color: #f0f2f5;
+  min-height: 100vh;
+  padding: 40px 20px;
+}
+
+.dashboard-inner {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+}
+
+.page-title,
+.profile-name,
+.section-title,
+.favorite-author {
+  color: #303133;
+}
+
+.page-title,
+.profile-name {
+  margin: 0;
+}
+
+.profile-card {
+  border-radius: 12px;
+  margin-bottom: 30px;
+}
+
+.profile-row {
+  display: flex;
+  align-items: center;
+}
+
+.profile-avatar {
+  border: 2px solid #eee;
+  margin-right: 30px;
+}
+
+.profile-info {
+  flex-grow: 1;
+}
+
+.profile-name {
+  margin-bottom: 10px;
+}
+
+.profile-uid,
+.profile-signature,
+.favorite-time,
+.favorite-meta {
+  color: #909399;
+  font-size: 12px;
+}
+
+.profile-uid {
+  margin: 0 0 15px 0;
+  font-size: 14px;
+}
+
+.profile-signature {
+  margin: 0 0 6px 0;
+  font-size: 13px;
+}
+
+.section-title {
+  margin-bottom: 20px;
+}
+
+.favorite-title {
+  margin: 30px 0 20px;
+}
+
+.favorite-card {
+  border-radius: 12px;
+  height: 100%;
+  cursor: pointer;
+}
+
+.favorite-author {
+  font-weight: bold;
+}
+
+.favorite-preview {
+  color: #606266;
+  font-size: 14px;
+  line-height: 1.7;
+  margin-bottom: 12px;
+}
+
+.favorite-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+</style>

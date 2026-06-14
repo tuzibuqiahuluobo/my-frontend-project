@@ -208,6 +208,7 @@ const submitForm = async () => {
         uid: data.uid,
         username: data.username,
         nickname: data.nickname,
+        signature: data.signature,
         avatar: data.avatar,
         role: data.role,
         token: data.token

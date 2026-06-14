@@ -112,6 +112,7 @@ onMounted(() => {
         <el-avatar :size="46" :src="post.avatar" />
         <div class="user-info">
           <span class="username">{{ post.nickname || post.username }}</span>
+          <span v-if="post.signature" class="signature">{{ post.signature }}</span>
           <span class="time">{{ formatDate(post.created_at) }}</span>
         </div>
       </div>
@@ -211,6 +212,12 @@ onMounted(() => {
 .comment-time {
   font-size: 12px;
   color: #909399;
+  margin-top: 4px;
+}
+
+.signature {
+  font-size: 13px;
+  color: #6b7280;
   margin-top: 4px;
 }
 

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { clearStoredUser, getStoredUser } from '../api'
 import DynamicMenuItem from '../components/DynamicMenuItem.vue'
@@ -13,6 +13,11 @@ const isCollapse = ref(true)
 const isDarkMode = ref(false)
 
 const currentUser = ref({ username: '', avatar: '' })
+
+const applyBodyThemeClass = () => {
+  // Element Plus 的弹窗、下拉框会挂到 body 下，把夜间状态同步过去才能统一变暗。
+  document.body.classList.toggle('sunshine-dark', isDarkMode.value)
+}
 
 const joinRoutePath = (parentPath, childPath) => {
   // 子路由如果以 / 开头，说明它本来就是完整路径，不需要再拼父路径。
@@ -55,6 +60,11 @@ onMounted(() => {
 
   // 主题偏好存在 localStorage 里，刷新页面后也能记住白天/夜间模式。
   isDarkMode.value = localStorage.getItem('theme-mode') === 'dark'
+  applyBodyThemeClass()
+})
+
+onUnmounted(() => {
+  document.body.classList.remove('sunshine-dark')
 })
 
 // 下拉菜单的点击事件监听（点击个人中心或退出登录）
@@ -76,6 +86,8 @@ const saveThemeMode = () => {
   // 每次切换后写入 localStorage，下一次打开页面时就能恢复用户选择。
   localStorage.setItem('theme-mode', isDarkMode.value ? 'dark' : 'light')
 }
+
+watch(isDarkMode, applyBodyThemeClass)
 </script>
 
 <template>
@@ -248,6 +260,17 @@ const saveThemeMode = () => {
 .dark-mode :deep(.el-menu-item),
 .dark-mode :deep(.el-sub-menu__title) {
   color: #d1d5db;
+}
+
+.dark-mode :deep(.el-menu-item:hover),
+.dark-mode :deep(.el-sub-menu__title:hover) {
+  color: #f8fafc;
+  background-color: #2f3d52;
+}
+
+.dark-mode :deep(.el-menu-item:hover .el-icon),
+.dark-mode :deep(.el-sub-menu__title:hover .el-icon) {
+  color: #7dd3fc;
 }
 
 .dark-mode :deep(.el-menu-item.is-active) {

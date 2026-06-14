@@ -139,3 +139,19 @@ my-frontend/
 ## AI 协作声明
 
 约 70% 的代码由 AI 协助生成。
+
+## 线上部署提示
+
+部署到服务器前，请复制并修改线上环境变量模板：
+
+```bash
+cp .env.production.example .env.production
+```
+
+将其中的 `VITE_API_BASE_URL` 改成你的 HTTPS 域名，例如：
+
+```text
+VITE_API_BASE_URL=https://example.com
+```
+
+完整的阿里云轻量服务器部署步骤在后端仓库的 `deploy/README.zh-CN.md` 中。

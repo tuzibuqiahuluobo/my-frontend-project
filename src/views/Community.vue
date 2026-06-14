@@ -272,6 +272,7 @@ const formatDate = (timeString) => {
           <el-avatar :size="40" :src="post.avatar" />
           <div class="user-info">
             <span class="username">{{ post.nickname || post.username }}</span>
+            <span v-if="post.signature" class="signature">{{ post.signature }}</span>
             <span class="time">{{ formatDate(post.created_at) }}</span>
           </div>
         </div>
@@ -489,6 +490,16 @@ const formatDate = (timeString) => {
   margin-top: 4px;
 }
 
+.signature {
+  font-size: 12px;
+  color: #6b7280;
+  margin-top: 3px;
+  max-width: 560px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .post-content {
   font-size: 14px;
   color: #606266;
@@ -580,4 +591,5 @@ const formatDate = (timeString) => {
   color: #909399; 
   padding: 10px 0; 
 }
+
 </style>

@@ -13,6 +13,10 @@ dist
 dist-ssr
 coverage
 *.local
+.env
+.env.production
+!.env.example
+!.env.production.example
 
 # Editor directories and files
 .vscode/*
@@ -37,3 +41,4 @@ __screenshots__/
 
 # Vite
 *.timestamp-*-*.mjs
+npm.cmd
