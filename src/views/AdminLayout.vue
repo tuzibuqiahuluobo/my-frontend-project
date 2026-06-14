@@ -342,7 +342,7 @@ onMounted(() => {
                 <el-input v-model="adminForm.email" :prefix-icon="Message" placeholder="请输入管理员邮箱" :maxlength="INPUT_LIMITS.emailMax" />
               </el-form-item>
               <el-form-item label="新密码">
-                <el-input v-model="adminForm.password" :prefix-icon="Lock" type="password" show-password placeholder="不修改请留空，8-32位且含字母和数字" :maxlength="INPUT_LIMITS.passwordMax" />
+                <el-input v-model="adminForm.password" :prefix-icon="Lock" type="password" show-password placeholder="不修改请留空，8-32位且含大小写字母和数字" :maxlength="INPUT_LIMITS.passwordMax" />
               </el-form-item>
               <el-form-item label="当前密码">
                 <el-input v-model="adminForm.currentPassword" :prefix-icon="Lock" type="password" show-password placeholder="保存前必须输入当前密码" :maxlength="INPUT_LIMITS.passwordMax" />

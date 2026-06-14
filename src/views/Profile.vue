@@ -5,7 +5,7 @@ import { ElMessage, ElMessageBox } from 'element-plus' // 新增引入 ElMessage
 import 'vue-cropper/dist/index.css'
 import { VueCropper } from 'vue-cropper'
 import { apiRequest, getStoredUser, saveStoredUser } from '../api'
-import { INPUT_LIMITS, validateNicknameInput, validatePasswordInput, validateUsernameInput } from '../utils/inputRules'
+import { INPUT_LIMITS, validateNicknameInput, validatePasswordInput, validateSignatureInput, validateUsernameInput } from '../utils/inputRules'
 
 const router = useRouter()
 // 新增 nickname 字段
@@ -144,6 +144,11 @@ const saveAllProfile = () => {
     ElMessage.warning(passwordMessage)
     return
   }
+  const signatureMessage = validateSignatureInput(newSignature)
+  if (signatureMessage) {
+    ElMessage.warning(signatureMessage)
+    return
+  }
   if (newSignature.length > 50) {
     // 前端先拦一次，用户能立刻看到提示；后端也会再校验，避免绕过页面直接请求接口。
     ElMessage.warning('个性签名最多 50 个字')
@@ -254,7 +259,7 @@ const saveAllProfile = () => {
             <el-input
               v-model="editPassword"
               type="password"
-              placeholder="若不修改请留空，8-32位且含字母和数字"
+              placeholder="若不修改请留空，8-32位且含大小写字母和数字"
               show-password
               clearable
               :maxlength="INPUT_LIMITS.passwordMax"

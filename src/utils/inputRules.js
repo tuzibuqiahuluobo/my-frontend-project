@@ -1,11 +1,21 @@
 export const INPUT_LIMITS = {
-  usernameMin: 2,
-  usernameMax: 20,
+  usernameMin: 3,
+  usernameMax: 15,
   nicknameMax: 15,
   passwordMin: 8,
   passwordMax: 32,
   emailMax: 254
 }
+
+const sensitiveWords = [
+  'admin', 'administrator', 'root', 'system', 'official', 'sunshine官方',
+  '管理员', '超级管理员', '官方', '客服', '站长', '版主',
+  '傻逼', '垃圾', '操', '妈的', 'fuck', 'shit',
+  '赌博', '博彩', '诈骗', '外挂', '代刷', '色情', '约炮', '毒品'
+]
+
+const passwordSpecialChars = '！!@#￥%*&'
+const passwordSpecialCharsText = '！@#￥%*&'
 
 export const textLength = (value) => {
   // 用 Array.from 统计用户看见的字符数，中文、英文和常见符号都更接近“字数”的直觉。
@@ -14,17 +24,51 @@ export const textLength = (value) => {
 
 export const normalizeEmail = (value) => String(value || '').trim().toLowerCase()
 
+const hasSensitiveWord = (value) => {
+  // 统一转小写后检查，避免 Admin / ADMIN 绕过敏感词限制。
+  const normalized = String(value || '').trim().toLowerCase()
+  return sensitiveWords.some(word => normalized.includes(word.toLowerCase()))
+}
+
+const validateNoSensitiveWord = (label, value) => {
+  if (hasSensitiveWord(value)) {
+    return `${label}包含不适合使用的词，请换一个更友好的内容`
+  }
+  return ''
+}
+
 export const validateUsernameInput = (value) => {
-  const length = textLength(String(value || '').trim())
+  const username = String(value || '').trim()
+  const length = textLength(username)
   if (length < INPUT_LIMITS.usernameMin || length > INPUT_LIMITS.usernameMax) {
     return `账号长度需要在 ${INPUT_LIMITS.usernameMin}-${INPUT_LIMITS.usernameMax} 个字之间`
+  }
+  if (!/^[A-Za-z]/.test(username)) {
+    return '账号必须以英文字母开头'
+  }
+  const sensitiveMessage = validateNoSensitiveWord('账号', username)
+  if (sensitiveMessage) {
+    return sensitiveMessage
   }
   return ''
 }
 
 export const validateNicknameInput = (value) => {
-  if (textLength(String(value || '').trim()) > INPUT_LIMITS.nicknameMax) {
+  const nickname = String(value || '').trim()
+  if (textLength(nickname) > INPUT_LIMITS.nicknameMax) {
     return `昵称最多 ${INPUT_LIMITS.nicknameMax} 个字`
+  }
+  const sensitiveMessage = validateNoSensitiveWord('昵称', nickname)
+  if (sensitiveMessage) {
+    return sensitiveMessage
+  }
+  return ''
+}
+
+export const validateSignatureInput = (value) => {
+  const sensitiveMessage = validateNoSensitiveWord('个性签名', value)
+  if (sensitiveMessage) {
+    return sensitiveMessage
   }
   return ''
 }
@@ -41,8 +85,16 @@ export const validatePasswordInput = (value, { allowEmpty = false } = {}) => {
   if (/\s/.test(password)) {
     return '密码不能包含空格或换行'
   }
-  if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) {
-    return '密码需要同时包含字母和数字'
+  if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/\d/.test(password)) {
+    return '密码需要同时包含大写字母、小写字母和数字'
+  }
+  for (const char of Array.from(password)) {
+    if (/[A-Za-z0-9]/.test(char)) {
+      continue
+    }
+    if (!passwordSpecialChars.includes(char)) {
+      return `密码特殊字符只能使用 ${passwordSpecialCharsText}`
+    }
   }
   return ''
 }
