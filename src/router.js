@@ -13,6 +13,7 @@ import AdminLayout from './views/AdminLayout.vue'
 import Community from './views/Community.vue'
 import MainLayout from './views/MainLayout.vue'
 import PostDetail from './views/PostDetail.vue'
+import GameCenter from './views/GameCenter.vue'
 import { getStoredUser, isAdmin } from './api'
 
 
@@ -54,6 +55,15 @@ const routes = [
                 meta: {
                     title: '个人中心',
                     icon: 'User',
+                    menu: true
+                }
+            },
+            {
+                path: 'games',
+                component: GameCenter,
+                meta: {
+                    title: '游戏中心',
+                    icon: 'Collection',
                     menu: true
                 }
             },

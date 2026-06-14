@@ -161,16 +161,18 @@ const getPostImages = (post) => {
   return post.image ? [post.image] : []
 }
 
-const getPostTitle = (post) => {
-  const title = String(post.title || '').trim()
-  if (title) return title
-  const content = String(post.content || '').trim()
-  if (content) return content.length > 32 ? `${content.slice(0, 32)}...` : content
-  return '图片动态'
+const hasPostTitle = (post) => {
+  return String(post.title || '').trim() !== ''
 }
 
 const shouldShowExpand = (post) => {
-  return String(post.content || '').length > 120
+  const maxPreviewLength = getPostImages(post).length > 0 ? 120 : 420
+  return String(post.content || '').length > maxPreviewLength
+}
+
+const postContentClass = (post) => {
+  if (post.isExpanded || !shouldShowExpand(post)) return ''
+  return getPostImages(post).length > 0 ? 'collapsed with-images' : 'collapsed no-images'
 }
 
 const startEditPost = (post) => {
@@ -302,9 +304,9 @@ const formatDate = (timeString) => {
           </div>
           <el-input
             v-model="newPostTitle"
-            maxlength="60"
+            maxlength="15"
             show-word-limit
-            placeholder="标题（可不填，空标题会显示正文摘要）"
+            placeholder="标题（可不填，最多 15 字）"
             class="publish-title-input"
           />
           <el-input
@@ -400,11 +402,11 @@ const formatDate = (timeString) => {
           </div>
         </div>
 
-        <h3 class="post-title" @click="goToPostDetail(post.id)">{{ getPostTitle(post) }}</h3>
+        <h3 v-if="hasPostTitle(post)" class="post-title" @click="goToPostDetail(post.id)">{{ post.title }}</h3>
         
         <div
           class="post-content"
-          :class="{ collapsed: !post.isExpanded && shouldShowExpand(post) }"
+          :class="postContentClass(post)"
           @click="goToPostDetail(post.id)"
         >
           {{ post.content }}
@@ -745,8 +747,15 @@ const formatDate = (timeString) => {
 .post-content.collapsed {
   display: -webkit-box;
   overflow: hidden;
-  -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
+}
+
+.post-content.collapsed.with-images {
+  -webkit-line-clamp: 3;
+}
+
+.post-content.collapsed.no-images {
+  -webkit-line-clamp: 10;
 }
 
 .expand-button {

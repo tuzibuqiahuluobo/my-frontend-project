@@ -446,7 +446,7 @@ const submitForm = async () => {
         </div>
         
         <el-button 
-          v-else
+          v-if="isAdminMode"
           type="info" 
           link 
           @click="exitAdminMode"

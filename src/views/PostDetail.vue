@@ -25,12 +25,8 @@ const getPostImages = (targetPost) => {
   return targetPost?.image ? [targetPost.image] : []
 }
 
-const getPostTitle = (targetPost) => {
-  const title = String(targetPost?.title || '').trim()
-  if (title) return title
-  const content = String(targetPost?.content || '').trim()
-  if (content) return content.length > 40 ? `${content.slice(0, 40)}...` : content
-  return '图片动态'
+const hasPostTitle = (targetPost) => {
+  return String(targetPost?.title || '').trim() !== ''
 }
 
 const loadPostDetail = async () => {
@@ -132,7 +128,7 @@ onMounted(() => {
         </div>
       </div>
 
-      <h1 class="detail-title">{{ getPostTitle(post) }}</h1>
+      <h1 v-if="hasPostTitle(post)" class="detail-title">{{ post.title }}</h1>
       <div class="post-content">{{ post.content }}</div>
 
       <PostImageGrid :images="getPostImages(post)" />

@@ -94,12 +94,8 @@ const postImages = (post) => {
   return post.image ? [post.image] : []
 }
 
-const postTitle = (post) => {
-  const title = String(post.title || '').trim()
-  if (title) return title
-  const text = String(post.content || '').trim()
-  if (text) return text.length > 32 ? `${text.slice(0, 32)}...` : text
-  return '图片动态'
+const hasPostTitle = (post) => {
+  return String(post.title || '').trim() !== ''
 }
 
 const postPreview = (content, hasImage = false) => {
@@ -156,7 +152,7 @@ const postPreview = (content, hasImage = false) => {
                 <div class="favorite-time">{{ formatDate(post.created_at) }}</div>
               </div>
             </div>
-            <h4 class="favorite-post-title">{{ postTitle(post) }}</h4>
+            <h4 v-if="hasPostTitle(post)" class="favorite-post-title">{{ post.title }}</h4>
             <PostImageGrid :images="postImages(post)" compact />
             <p class="favorite-preview">{{ postPreview(post.content, postImages(post).length > 0) }}</p>
             <div class="favorite-meta">

@@ -129,6 +129,27 @@ body.sunshine-dark .dashboard-page .el-empty__image {
   opacity: 0.55;
 }
 
+/* 游戏中心夜间模式：卡片封面保留色彩，文字和底板跟随主布局变暗。 */
+body.sunshine-dark .game-center-page .game-header h1,
+body.sunshine-dark .game-center-page .game-body h2 {
+  color: #e5e7eb !important;
+}
+
+body.sunshine-dark .game-center-page .game-header p,
+body.sunshine-dark .game-center-page .game-body p {
+  color: #cbd5e1 !important;
+}
+
+body.sunshine-dark .game-center-page .game-card {
+  background-color: #1f2937 !important;
+  border-color: #374151 !important;
+}
+
+body.sunshine-dark .game-center-page .game-count {
+  background-color: #0f2f3f !important;
+  color: #bae6fd !important;
+}
+
 /* 社区广场夜间模式：发帖框、帖子卡片和评论抽屉都统一压成暗色。 */
 body.sunshine-dark .community-container .publish-card,
 body.sunshine-dark .community-container .post-card {
