@@ -402,17 +402,17 @@ const submitForm = async () => {
           <p v-for="rule in fieldRules.email" :key="rule">{{ rule }}</p>
         </div>
 
-        <div style="display: flex; gap: 10px;">
+        <div class="auth-code-row">
           <el-input
             v-model="code"
             placeholder="请输入 6 位验证码"
             size="large"
-            style="flex-grow: 1;"
+            class="auth-code-input"
             @focus="showRules('code')"
             @blur="hideRules"
             @keyup.enter="submitForm"
           />
-          <el-button size="large" type="primary" plain :disabled="countdown > 0" @click="sendCode" style="width: 120px;">
+          <el-button size="large" type="primary" plain :disabled="countdown > 0" @click="sendCode" class="auth-code-button">
             {{ countdown > 0 ? `${countdown}s 后重发` : '获取验证码' }}
           </el-button>
         </div>
@@ -424,7 +424,7 @@ const submitForm = async () => {
       <el-button 
         :type="isAdminMode ? 'danger' : 'primary'" 
         size="large" 
-        style="width: 100%; margin-bottom: 15px; font-weight: bold;" 
+        class="auth-submit-button"
         :loading="loading" 
         @click="submitForm"
       >
@@ -479,16 +479,16 @@ const submitForm = async () => {
         <p v-for="rule in fieldRules.email" :key="rule">{{ rule }}</p>
       </div>
 
-      <div style="display: flex; gap: 10px;">
+      <div class="auth-code-row dialog-code-row">
         <el-input
           v-model="recoverCode"
           placeholder="请输入验证码"
           size="large"
-          style="flex-grow: 1;"
+          class="auth-code-input"
           @focus="showRules('recoverCode')"
           @blur="hideRules"
         />
-        <el-button size="large" type="primary" plain :disabled="recoverCountdown > 0" @click="sendRecoverCode" style="width: 120px;">
+        <el-button size="large" type="primary" plain :disabled="recoverCountdown > 0" @click="sendRecoverCode" class="auth-code-button">
           {{ recoverCountdown > 0 ? `${recoverCountdown}s` : '获取验证码' }}
         </el-button>
       </div>
@@ -529,6 +529,34 @@ const submitForm = async () => {
 <style scoped>
 .auth-input {
   margin-bottom: 12px;
+}
+
+.auth-code-row {
+  display: flex;
+  width: 100%;
+  gap: 12px;
+  align-items: stretch;
+  margin-bottom: 16px;
+}
+
+.dialog-code-row {
+  margin-bottom: 12px;
+}
+
+.auth-code-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.auth-code-button {
+  width: 128px;
+  flex: 0 0 128px;
+}
+
+.auth-submit-button {
+  width: 100%;
+  margin-bottom: 15px;
+  font-weight: bold;
 }
 
 .input-rules {

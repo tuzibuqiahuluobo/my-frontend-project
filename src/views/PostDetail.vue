@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, ChatDotRound, Delete, Star, StarFilled } from '@element-plus/icons-vue'
 import { apiRequest, getStoredUser, isAdmin } from '../api'
+import PostImageGrid from '../components/PostImageGrid.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -16,6 +17,20 @@ const formatDate = (timeString) => {
   // 详情页显示完整一点的时间，方便用户知道这条动态具体是什么时候发的。
   const date = new Date(timeString)
   return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日 ${date.getHours()}:${String(date.getMinutes()).padStart(2, '0')}`
+}
+
+const getPostImages = (targetPost) => {
+  // 新帖子使用 images 数组，旧帖子可能只有 image 字段；详情页统一转成数组交给九宫格组件。
+  if (Array.isArray(targetPost?.images) && targetPost.images.length > 0) return targetPost.images
+  return targetPost?.image ? [targetPost.image] : []
+}
+
+const getPostTitle = (targetPost) => {
+  const title = String(targetPost?.title || '').trim()
+  if (title) return title
+  const content = String(targetPost?.content || '').trim()
+  if (content) return content.length > 40 ? `${content.slice(0, 40)}...` : content
+  return '图片动态'
 }
 
 const loadPostDetail = async () => {
@@ -117,15 +132,10 @@ onMounted(() => {
         </div>
       </div>
 
+      <h1 class="detail-title">{{ getPostTitle(post) }}</h1>
       <div class="post-content">{{ post.content }}</div>
 
-      <img
-        v-if="post.image"
-        class="detail-image"
-        :src="post.image"
-        alt="帖子图片"
-        loading="lazy"
-      />
+      <PostImageGrid :images="getPostImages(post)" />
 
       <div class="post-stats">
         <span><el-icon><ChatDotRound /></el-icon> {{ post.comments ? post.comments.length : 0 }} 条评论</span>
@@ -233,22 +243,19 @@ onMounted(() => {
   margin-left: 10px;
 }
 
+.detail-title {
+  margin: 24px 0 10px;
+  color: #303133;
+  font-size: 24px;
+  line-height: 1.35;
+}
+
 .post-content {
   color: #303133;
   font-size: 18px;
   line-height: 1.8;
   white-space: pre-wrap;
   margin: 24px 0 16px;
-}
-
-.detail-image {
-  display: block;
-  width: 100%;
-  max-height: 680px;
-  object-fit: contain;
-  border-radius: 8px;
-  margin: 0 0 24px;
-  background: #f8fafc;
 }
 
 .post-stats,

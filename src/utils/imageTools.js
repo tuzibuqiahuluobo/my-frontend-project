@@ -3,6 +3,7 @@ export const AVATAR_MAX_BYTES = 2 * 1024 * 1024
 export const POST_GIF_MAX_BYTES = 2 * 1024 * 1024
 export const POST_SOURCE_MAX_BYTES = 8 * 1024 * 1024
 export const POST_DATA_URL_MAX_LENGTH = 2 * 1024 * 1024
+export const POST_MAX_IMAGES = 9
 
 const acceptedImageTypes = ['image/png', 'image/jpeg', 'image/webp', 'image/gif']
 
@@ -83,4 +84,18 @@ export const compressPostImage = async (file) => {
   } finally {
     URL.revokeObjectURL(sourceUrl)
   }
+}
+
+export const compressPostImages = async (files, existingCount = 0) => {
+  const imageFiles = Array.from(files || [])
+  if (existingCount + imageFiles.length > POST_MAX_IMAGES) {
+    throw new Error(`帖子图片最多上传 ${POST_MAX_IMAGES} 张`)
+  }
+
+  const results = []
+  for (const file of imageFiles) {
+    // 多图按顺序逐张压缩，用户看到的预览顺序就和选择文件时保持一致。
+    results.push(await compressPostImage(file))
+  }
+  return results
 }

@@ -2,10 +2,11 @@
 import { computed, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ChatDotRound, Star, StarFilled, Delete, Picture } from '@element-plus/icons-vue'
+import { ChatDotRound, Star, StarFilled, Delete, Picture, Edit } from '@element-plus/icons-vue'
 import { apiRequest, getStoredUser, isAdmin } from '../api'
 import TwemojiIcon from '../components/TwemojiIcon.vue'
-import { IMAGE_ACCEPT, compressPostImage } from '../utils/imageTools'
+import PostImageGrid from '../components/PostImageGrid.vue'
+import { IMAGE_ACCEPT, POST_MAX_IMAGES, compressPostImages } from '../utils/imageTools'
 import { buildTwemojiCatalog, findTwemojiByCodePoint } from '../utils/twemojiCatalog'
 
 const router = useRouter()
@@ -14,11 +15,13 @@ const loading = ref(true)
 
 // 【新增】发帖相关的变量
 const currentUser = ref({ uid: null, username: '匿名', nickname: '', avatar: '', role: 0, token: '' })
+const newPostTitle = ref('')
 const newPostContent = ref('')
-const postImage = ref('')
+const postImages = ref([])
 const postImageInputRef = ref(null)
 const isSubmitting = ref(false)
 const isProcessingImage = ref(false)
+const editingPostId = ref(null)
 const emojiPageSize = 40
 const emojiPage = ref(1)
 // 表情数据由 Twemoji 解析器筛选生成，不在页面代码里手动维护一长串 emoji。
@@ -38,15 +41,18 @@ const loadPosts = async () => {
   try {
     //刷新前：把当前帖子的展开状态存进字典里
     const stateMap = {}
+    const expandMap = {}
     posts.value.forEach(post => {
       stateMap[post.id] = post.showComments
+      expandMap[post.id] = post.isExpanded
     })
     // 如果用户已登录，apiRequest 会自动带上 token，后端会据此判断哪些帖子已收藏
     const data = await apiRequest('/api/posts')
     // 刷新后：去字典里核对，之前是展开的就保持展开，如果是新帖子就默认折叠(false)
     posts.value = data.map(post => ({ 
       ...post, 
-      showComments: stateMap[post.id] || false 
+      showComments: stateMap[post.id] || false,
+      isExpanded: expandMap[post.id] || false
     }))
   } catch (error) {
     console.error("获取帖子失败", error)
@@ -68,24 +74,26 @@ onMounted(() => {
 
 // 发送帖子的核心函数
 const submitPost = async () => {
-  if (!newPostContent.value.trim() && !postImage.value) {
+  if (!newPostContent.value.trim() && postImages.value.length === 0) {
     ElMessage.warning('好歹写点什么再发呀！')
     return
   }
 
   isSubmitting.value = true
   try {
-    const data = await apiRequest('/api/create-post', {
+    const isEditing = Boolean(editingPostId.value)
+    const data = await apiRequest(isEditing ? '/api/update-post' : '/api/create-post', {
       method: 'POST',
       body: JSON.stringify({
+        post_id: editingPostId.value,
+        title: newPostTitle.value,
         content: newPostContent.value,
-        image: postImage.value
+        images: postImages.value
       })
     })
 
     ElMessage.success(data.message)
-    newPostContent.value = '' // 清空输入框
-    postImage.value = ''
+    resetPostForm()
     loadPosts() // 加载新帖子
   } catch (error) {
     ElMessage.error(error.message || '网络错误，发送失败')
@@ -99,18 +107,28 @@ const addEmojiToPost = (emoji) => {
   newPostContent.value += emoji
 }
 
+const resetPostForm = () => {
+  // 发布和编辑共用同一个表单，保存成功或取消编辑时统一清空，避免旧图片残留到下一篇帖子。
+  editingPostId.value = null
+  newPostTitle.value = ''
+  newPostContent.value = ''
+  postImages.value = []
+}
+
 const triggerPostImageUpload = () => {
   postImageInputRef.value?.click()
 }
 
-const handlePostImageFile = async (file) => {
-  if (!file) return
+const handlePostImageFiles = async (files) => {
+  const imageFiles = Array.from(files || []).filter(file => file.type.startsWith('image/'))
+  if (imageFiles.length === 0) return
 
   isProcessingImage.value = true
   try {
-    // 发帖图片统一在前端压缩，减少请求体积，也能让列表里的图片加载更快。
-    postImage.value = await compressPostImage(file)
-    ElMessage.success('图片已添加')
+    // 发帖图片统一在前端压缩，减少请求体积，也能让列表里的图片加载更快；数组追加可以支持一次选择多张。
+    const compressedImages = await compressPostImages(imageFiles, postImages.value.length)
+    postImages.value = [...postImages.value, ...compressedImages]
+    ElMessage.success(`已添加 ${compressedImages.length} 张图片`)
   } catch (error) {
     ElMessage.error(error.message || '图片处理失败，请重新选择')
   } finally {
@@ -119,22 +137,49 @@ const handlePostImageFile = async (file) => {
 }
 
 const onPostImageSelected = (event) => {
-  handlePostImageFile(event.target.files[0])
+  handlePostImageFiles(event.target.files)
   event.target.value = ''
 }
 
 const handlePostPaste = (event) => {
   const items = Array.from(event.clipboardData?.items || [])
-  const imageItem = items.find(item => item.type.startsWith('image/'))
-  if (!imageItem) return
+  const imageItems = items.filter(item => item.type.startsWith('image/'))
+  if (imageItems.length === 0) return
 
   // 用户粘贴图片时阻止浏览器把图片文件名或无意义内容塞进文本框，只保留真正的图片预览。
   event.preventDefault()
-  handlePostImageFile(imageItem.getAsFile())
+  handlePostImageFiles(imageItems.map(item => item.getAsFile()))
 }
 
-const removePostImage = () => {
-  postImage.value = ''
+const removePostImage = (index) => {
+  postImages.value = postImages.value.filter((_, imageIndex) => imageIndex !== index)
+}
+
+const getPostImages = (post) => {
+  // 后端新字段是 images，旧数据可能只有 image；这里合并处理，前端展示就不用到处写兼容判断。
+  if (Array.isArray(post.images) && post.images.length > 0) return post.images
+  return post.image ? [post.image] : []
+}
+
+const getPostTitle = (post) => {
+  const title = String(post.title || '').trim()
+  if (title) return title
+  const content = String(post.content || '').trim()
+  if (content) return content.length > 32 ? `${content.slice(0, 32)}...` : content
+  return '图片动态'
+}
+
+const shouldShowExpand = (post) => {
+  return String(post.content || '').length > 120
+}
+
+const startEditPost = (post) => {
+  // 编辑时复用顶部发布框，初学阶段比弹窗状态更直观：把旧内容放回表单，保存时调用编辑接口。
+  editingPostId.value = post.id
+  newPostTitle.value = post.title || ''
+  newPostContent.value = post.content || ''
+  postImages.value = [...getPostImages(post)]
+  window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
 const goToPostDetail = (postId) => {
@@ -251,6 +296,17 @@ const formatDate = (timeString) => {
       <div class="publish-area">
         <el-avatar :size="45" :src="currentUser.avatar" />
         <div class="publish-main" @paste.capture="handlePostPaste">
+          <div v-if="editingPostId" class="editing-banner">
+            正在编辑帖子 #{{ editingPostId }}
+            <button type="button" @click="resetPostForm">取消编辑</button>
+          </div>
+          <el-input
+            v-model="newPostTitle"
+            maxlength="60"
+            show-word-limit
+            placeholder="标题（可不填，空标题会显示正文摘要）"
+            class="publish-title-input"
+          />
           <el-input
             v-model="newPostContent"
             type="textarea"
@@ -261,11 +317,13 @@ const formatDate = (timeString) => {
             class="publish-input"
           />
 
-          <div v-if="postImage || isProcessingImage" class="post-image-preview">
+          <div v-if="postImages.length || isProcessingImage" class="post-image-preview-grid">
             <el-skeleton v-if="isProcessingImage" :rows="1" animated />
             <template v-else>
-              <img :src="postImage" alt="待发布图片预览" />
-              <button type="button" class="remove-image-button" @click="removePostImage">移除</button>
+              <div v-for="(image, index) in postImages" :key="`${image.slice(0, 30)}-${index}`" class="preview-image-cell">
+                <img :src="image" alt="待发布图片预览" />
+                <button type="button" class="remove-image-button" @click="removePostImage(index)">移除</button>
+              </div>
             </template>
           </div>
 
@@ -304,12 +362,13 @@ const formatDate = (timeString) => {
                 class="tool-trigger image-trigger"
                 type="button"
                 title="添加图片"
-                :disabled="isProcessingImage"
+                :disabled="isProcessingImage || postImages.length >= POST_MAX_IMAGES"
                 @click="triggerPostImageUpload"
               >
                 <el-icon><Picture /></el-icon>
               </button>
-              <input ref="postImageInputRef" type="file" :accept="IMAGE_ACCEPT" style="display: none;" @change="onPostImageSelected">
+              <span class="image-count-text">{{ postImages.length }}/{{ POST_MAX_IMAGES }}</span>
+              <input ref="postImageInputRef" type="file" :accept="IMAGE_ACCEPT" multiple style="display: none;" @change="onPostImageSelected">
             </div>
             <el-button 
               type="primary" 
@@ -320,7 +379,7 @@ const formatDate = (timeString) => {
               color="#38bdf8"
               class="publish-button"
             >
-              立即发布
+              {{ editingPostId ? '保存修改' : '立即发布' }}
             </el-button>
           </div>
         </div>
@@ -340,19 +399,22 @@ const formatDate = (timeString) => {
             <span class="time">{{ formatDate(post.created_at) }}</span>
           </div>
         </div>
+
+        <h3 class="post-title" @click="goToPostDetail(post.id)">{{ getPostTitle(post) }}</h3>
         
-        <div class="post-content" @click="goToPostDetail(post.id)">
+        <div
+          class="post-content"
+          :class="{ collapsed: !post.isExpanded && shouldShowExpand(post) }"
+          @click="goToPostDetail(post.id)"
+        >
           {{ post.content }}
         </div>
 
-        <img
-          v-if="post.image"
-          class="post-image"
-          :src="post.image"
-          alt="帖子图片"
-          loading="lazy"
-          @click="goToPostDetail(post.id)"
-        />
+        <button v-if="shouldShowExpand(post)" type="button" class="expand-button" @click.stop="post.isExpanded = !post.isExpanded">
+          {{ post.isExpanded ? '收起全文' : '展开全文' }}
+        </button>
+
+        <PostImageGrid :images="getPostImages(post)" />
         
         <div class="post-footer">
           
@@ -372,6 +434,9 @@ const formatDate = (timeString) => {
             </div>
 
             <div class="right-actions" v-if="post.username === currentUser.username || isAdmin(currentUser)">
+              <el-button type="primary" link :icon="Edit" @click="startEditPost(post)">
+                编辑
+              </el-button>
               <el-button type="danger" link :icon="Delete" @click="deletePost(post.id)">
                 删除
               </el-button>
@@ -455,6 +520,29 @@ const formatDate = (timeString) => {
   min-width: 0;
 }
 
+.editing-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #ecfeff;
+  color: #0891b2;
+  font-size: 13px;
+}
+
+.editing-banner button {
+  border: none;
+  background: transparent;
+  color: #0284c7;
+  cursor: pointer;
+}
+
+.publish-title-input {
+  margin-bottom: 10px;
+}
+
 .publish-input {
   flex-grow: 1;
 }
@@ -479,7 +567,7 @@ const formatDate = (timeString) => {
   height: 42px;
   border: 1px solid #dcdfe6;
   background: #ffffff;
-  border-radius: 50%;
+  border-radius: 12px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -503,6 +591,11 @@ const formatDate = (timeString) => {
 .image-trigger {
   color: #38bdf8;
   font-size: 20px;
+}
+
+.image-count-text {
+  color: #909399;
+  font-size: 12px;
 }
 
 .publish-button {
@@ -547,20 +640,27 @@ const formatDate = (timeString) => {
   color: #909399;
 }
 
-.post-image-preview {
-  position: relative;
-  width: min(260px, 100%);
+.post-image-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  width: min(420px, 100%);
   margin-top: 12px;
+}
+
+.preview-image-cell {
+  position: relative;
+  aspect-ratio: 1 / 1;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   overflow: hidden;
   background: #f8fafc;
 }
 
-.post-image-preview img {
+.preview-image-cell img {
   display: block;
   width: 100%;
-  max-height: 180px;
+  height: 100%;
   object-fit: cover;
 }
 
@@ -582,6 +682,12 @@ const formatDate = (timeString) => {
 .post-card {
   margin-bottom: 20px;
   border-radius: 8px;
+}
+
+.post-card :deep(.el-card__body) {
+  min-height: 360px;
+  display: flex;
+  flex-direction: column;
 }
 
 .post-header {
@@ -618,24 +724,39 @@ const formatDate = (timeString) => {
   white-space: nowrap;
 }
 
+.post-title {
+  margin: 0 0 8px;
+  color: #303133;
+  font-size: 17px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
 .post-content {
   font-size: 14px;
   color: #606266;
   line-height: 1.6;
-  margin-bottom: 15px;
+  min-height: 44px;
+  margin-bottom: 8px;
   white-space: pre-wrap;
   cursor: pointer;
 }
 
-.post-image {
-  display: block;
-  width: 100%;
-  max-height: 520px;
-  object-fit: contain;
-  border-radius: 8px;
-  margin: 0 0 15px;
-  background: #f8fafc;
+.post-content.collapsed {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+.expand-button {
+  border: none;
+  padding: 0;
+  margin: 0 0 8px;
+  background: transparent;
+  color: #38bdf8;
   cursor: pointer;
+  font-size: 13px;
 }
 
 /* ==================== 
@@ -644,6 +765,7 @@ const formatDate = (timeString) => {
 .post-footer {
   border-top: 1px solid #ebeef5; 
   padding-top: 12px;
+  margin-top: auto;
 }
 
 .post-actions {
@@ -655,6 +777,11 @@ const formatDate = (timeString) => {
 .left-actions {
   display: flex;
   gap: 20px; /* 评论和收藏按钮之间的间距 */
+}
+
+.right-actions {
+  display: flex;
+  gap: 10px;
 }
 
 /* ==================== 

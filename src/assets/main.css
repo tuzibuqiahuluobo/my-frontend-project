@@ -43,6 +43,10 @@ body.sunshine-dark .el-empty__description p {
   color: #9ca3af;
 }
 
+body.sunshine-dark .el-image-viewer__wrapper {
+  background-color: rgba(3, 7, 18, 0.88);
+}
+
 /* 个人设置页夜间模式：这里放全局样式，避免 Vue scoped 选择器影响 Element Plus 内部节点。 */
 body.sunshine-dark .profile-page {
   background-color: #111827 !important;
@@ -95,7 +99,8 @@ body.sunshine-dark .dashboard-page .favorite-card {
 body.sunshine-dark .dashboard-page .page-title,
 body.sunshine-dark .dashboard-page .profile-name,
 body.sunshine-dark .dashboard-page .section-title,
-body.sunshine-dark .dashboard-page .favorite-author {
+body.sunshine-dark .dashboard-page .favorite-author,
+body.sunshine-dark .dashboard-page .favorite-post-title {
   color: #e5e7eb !important;
 }
 
@@ -111,7 +116,7 @@ body.sunshine-dark .dashboard-page .profile-avatar {
   border-color: #4b5563 !important;
 }
 
-body.sunshine-dark .dashboard-page .favorite-image {
+body.sunshine-dark .dashboard-page .grid-image {
   background-color: #111827 !important;
 }
 
@@ -136,7 +141,8 @@ body.sunshine-dark .community-container .el-card {
   border-color: #374151 !important;
 }
 
-body.sunshine-dark .community-container .username {
+body.sunshine-dark .community-container .username,
+body.sunshine-dark .community-container .post-title {
   color: #e5e7eb !important;
 }
 
@@ -206,17 +212,32 @@ body.sunshine-dark .community-container .el-input-group__append {
 }
 
 body.sunshine-dark .community-container .post-image,
-body.sunshine-dark .community-container .post-image-preview {
+body.sunshine-dark .community-container .post-image-preview,
+body.sunshine-dark .community-container .post-image-preview-grid,
+body.sunshine-dark .community-container .preview-image-cell,
+body.sunshine-dark .community-container .grid-image {
   background-color: #111827 !important;
   border-color: #374151 !important;
 }
 
-body.sunshine-dark .detail-container .signature {
+body.sunshine-dark .community-container .editing-banner {
+  background-color: #0f2f3f !important;
+  color: #bae6fd !important;
+}
+
+body.sunshine-dark .detail-container .signature,
+body.sunshine-dark .detail-container .detail-title {
   color: #cbd5e1 !important;
 }
 
-body.sunshine-dark .detail-container .detail-image {
+body.sunshine-dark .detail-container .detail-image,
+body.sunshine-dark .detail-container .grid-image {
   background-color: #111827 !important;
+}
+
+body.sunshine-dark .el-button.is-round,
+body.sunshine-dark .el-button {
+  border-radius: 10px;
 }
 
 /* 夜间模式下 textarea 右下角字数统计，避免白色小块破坏整体暗色。 */

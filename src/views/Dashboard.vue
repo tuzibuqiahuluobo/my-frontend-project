@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { MagicStick, Setting, StarFilled } from '@element-plus/icons-vue'
 import { apiRequest, clearStoredUser, getStoredUser, saveStoredUser } from '../api'
+import PostImageGrid from '../components/PostImageGrid.vue'
 
 const router = useRouter()
 const currentUser = ref({ uid: null, username: '', nickname: '', signature: '', avatar: '' })
@@ -87,6 +88,20 @@ const goToPostDetail = (postId) => {
   router.push(`/main/community/post/${postId}`)
 }
 
+const postImages = (post) => {
+  // 收藏卡片也兼容旧单图数据，避免旧帖子没有 images 字段时不显示图片。
+  if (Array.isArray(post.images) && post.images.length > 0) return post.images
+  return post.image ? [post.image] : []
+}
+
+const postTitle = (post) => {
+  const title = String(post.title || '').trim()
+  if (title) return title
+  const text = String(post.content || '').trim()
+  if (text) return text.length > 32 ? `${text.slice(0, 32)}...` : text
+  return '图片动态'
+}
+
 const postPreview = (content, hasImage = false) => {
   // 收藏区只做简洁预览，内容太长时截断，真正阅读全文交给详情页。
   const text = String(content || '').trim()
@@ -141,8 +156,9 @@ const postPreview = (content, hasImage = false) => {
                 <div class="favorite-time">{{ formatDate(post.created_at) }}</div>
               </div>
             </div>
-            <img v-if="post.image" class="favorite-image" :src="post.image" alt="收藏帖子图片" loading="lazy" />
-            <p class="favorite-preview">{{ postPreview(post.content, Boolean(post.image)) }}</p>
+            <h4 class="favorite-post-title">{{ postTitle(post) }}</h4>
+            <PostImageGrid :images="postImages(post)" compact />
+            <p class="favorite-preview">{{ postPreview(post.content, postImages(post).length > 0) }}</p>
             <div class="favorite-meta">
               <span>评论 {{ post.comments ? post.comments.length : 0 }} · 收藏 {{ post.favorite_count }}</span>
               <el-button type="warning" plain size="small" :icon="StarFilled" @click.stop="toggleFavorite(post)">
@@ -247,21 +263,18 @@ const postPreview = (content, hasImage = false) => {
   font-weight: bold;
 }
 
+.favorite-post-title {
+  margin: 0 0 10px;
+  color: #303133;
+  font-size: 15px;
+  line-height: 1.4;
+}
+
 .favorite-preview {
   color: #606266;
   font-size: 14px;
   line-height: 1.7;
   margin-bottom: 12px;
-}
-
-.favorite-image {
-  display: block;
-  width: 100%;
-  height: 150px;
-  object-fit: cover;
-  border-radius: 8px;
-  margin-bottom: 12px;
-  background: #f8fafc;
 }
 
 .favorite-meta {
