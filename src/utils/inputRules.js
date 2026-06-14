@@ -2,7 +2,7 @@ export const INPUT_LIMITS = {
   usernameMin: 2,
   usernameMax: 20,
   nicknameMax: 15,
-  passwordMin: 6,
+  passwordMin: 8,
   passwordMax: 32,
   emailMax: 254
 }
@@ -37,6 +37,12 @@ export const validatePasswordInput = (value, { allowEmpty = false } = {}) => {
   const length = textLength(password)
   if (length < INPUT_LIMITS.passwordMin || length > INPUT_LIMITS.passwordMax) {
     return `密码长度需要在 ${INPUT_LIMITS.passwordMin}-${INPUT_LIMITS.passwordMax} 个字之间`
+  }
+  if (/\s/.test(password)) {
+    return '密码不能包含空格或换行'
+  }
+  if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) {
+    return '密码需要同时包含字母和数字'
   }
   return ''
 }

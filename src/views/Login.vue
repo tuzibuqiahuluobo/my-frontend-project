@@ -367,7 +367,7 @@ const submitForm = async () => {
         v-if="recoverMode === 'password'"
         v-model="recoverNewPassword"
         type="password"
-        placeholder="请输入新密码（至少 6 位）"
+        placeholder="请输入新密码（8-32位，含字母和数字）"
         show-password
         size="large"
         :maxlength="INPUT_LIMITS.passwordMax"

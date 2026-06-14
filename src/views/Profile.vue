@@ -254,7 +254,7 @@ const saveAllProfile = () => {
             <el-input
               v-model="editPassword"
               type="password"
-              placeholder="若不修改请留空，6-32位"
+              placeholder="若不修改请留空，8-32位且含字母和数字"
               show-password
               clearable
               :maxlength="INPUT_LIMITS.passwordMax"
