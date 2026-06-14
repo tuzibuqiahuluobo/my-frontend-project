@@ -14,6 +14,7 @@ import {
   UserFilled
 } from '@element-plus/icons-vue'
 import { apiRequest, clearStoredUser, getStoredUser, saveStoredUser } from '../api'
+import { INPUT_LIMITS, normalizeEmail, validateEmailInput, validatePasswordInput, validateUsernameInput } from '../utils/inputRules'
 
 const router = useRouter()
 const activeTab = ref('overview')
@@ -82,17 +83,38 @@ const saveAdminProfile = async () => {
     ElMessage.warning('请输入当前密码后再保存')
     return
   }
+  const usernameMessage = validateUsernameInput(adminForm.value.username)
+  if (usernameMessage) {
+    ElMessage.warning(usernameMessage)
+    return
+  }
+  const emailMessage = validateEmailInput(adminForm.value.email)
+  if (emailMessage) {
+    ElMessage.warning(emailMessage)
+    return
+  }
+  const passwordMessage = validatePasswordInput(adminForm.value.password, { allowEmpty: true })
+  if (passwordMessage) {
+    ElMessage.warning(passwordMessage)
+    return
+  }
+  const currentPasswordMessage = validatePasswordInput(adminForm.value.currentPassword)
+  if (currentPasswordMessage) {
+    ElMessage.warning(currentPasswordMessage)
+    return
+  }
+  adminForm.value.email = normalizeEmail(adminForm.value.email)
 
   savingAdmin.value = true
   try {
     const data = await apiRequest('/api/update-admin-profile', {
       method: 'POST',
       body: JSON.stringify({
-        username: adminForm.value.username,
+        username: adminForm.value.username.trim(),
         email: adminForm.value.email,
         avatar: adminForm.value.avatar,
-        password: adminForm.value.password,
-        current_password: adminForm.value.currentPassword
+        password: adminForm.value.password.trim(),
+        current_password: adminForm.value.currentPassword.trim()
       })
     })
 
@@ -314,16 +336,16 @@ onMounted(() => {
             <h3>修改超级管理员资料</h3>
             <el-form label-width="100px" class="admin-form">
               <el-form-item label="账号">
-                <el-input v-model="adminForm.username" :prefix-icon="User" placeholder="请输入管理员账号" />
+                <el-input v-model="adminForm.username" :prefix-icon="User" placeholder="请输入管理员账号" :maxlength="INPUT_LIMITS.usernameMax" show-word-limit />
               </el-form-item>
               <el-form-item label="邮箱">
-                <el-input v-model="adminForm.email" :prefix-icon="Message" placeholder="请输入管理员邮箱" />
+                <el-input v-model="adminForm.email" :prefix-icon="Message" placeholder="请输入管理员邮箱" :maxlength="INPUT_LIMITS.emailMax" />
               </el-form-item>
               <el-form-item label="新密码">
-                <el-input v-model="adminForm.password" :prefix-icon="Lock" type="password" show-password placeholder="不修改请留空" />
+                <el-input v-model="adminForm.password" :prefix-icon="Lock" type="password" show-password placeholder="不修改请留空，6-32位" :maxlength="INPUT_LIMITS.passwordMax" />
               </el-form-item>
               <el-form-item label="当前密码">
-                <el-input v-model="adminForm.currentPassword" :prefix-icon="Lock" type="password" show-password placeholder="保存前必须输入当前密码" />
+                <el-input v-model="adminForm.currentPassword" :prefix-icon="Lock" type="password" show-password placeholder="保存前必须输入当前密码" :maxlength="INPUT_LIMITS.passwordMax" />
               </el-form-item>
               <el-form-item>
                 <el-button type="primary" :loading="savingAdmin" @click="saveAdminProfile">保存管理员资料</el-button>

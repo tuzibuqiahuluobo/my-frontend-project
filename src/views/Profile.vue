@@ -5,6 +5,7 @@ import { ElMessage, ElMessageBox } from 'element-plus' // 新增引入 ElMessage
 import 'vue-cropper/dist/index.css'
 import { VueCropper } from 'vue-cropper'
 import { apiRequest, getStoredUser, saveStoredUser } from '../api'
+import { INPUT_LIMITS, validateNicknameInput, validatePasswordInput, validateUsernameInput } from '../utils/inputRules'
 
 const router = useRouter()
 // 新增 nickname 字段
@@ -128,8 +129,19 @@ const saveAllProfile = () => {
     ElMessage.warning('用户名不能为空哦')
     return
   }
-  if (newPassword && newPassword.length < 6) {
-    ElMessage.warning('密码太短啦，至少6位哦')
+  const nicknameMessage = validateNicknameInput(newNickname)
+  if (nicknameMessage) {
+    ElMessage.warning(nicknameMessage)
+    return
+  }
+  const usernameMessage = validateUsernameInput(newUsername)
+  if (usernameMessage) {
+    ElMessage.warning(usernameMessage)
+    return
+  }
+  const passwordMessage = validatePasswordInput(newPassword, { allowEmpty: true })
+  if (passwordMessage) {
+    ElMessage.warning(passwordMessage)
     return
   }
   if (newSignature.length > 50) {
@@ -204,7 +216,14 @@ const saveAllProfile = () => {
 
 
           <el-form-item label="社区昵称">
-            <el-input v-model="editNickname" placeholder="请输入展示的昵称" clearable @keyup.enter="saveAllProfile" />
+            <el-input
+              v-model="editNickname"
+              placeholder="请输入展示的昵称"
+              clearable
+              :maxlength="INPUT_LIMITS.nicknameMax"
+              show-word-limit
+              @keyup.enter="saveAllProfile"
+            />
           </el-form-item>
 
           <el-form-item label="个性签名">
@@ -221,11 +240,26 @@ const saveAllProfile = () => {
           </el-form-item>
           
           <el-form-item label="登录账号">
-            <el-input v-model="editUsername" placeholder="请输入新的用户名" clearable @keyup.enter="saveAllProfile" />
+            <el-input
+              v-model="editUsername"
+              placeholder="请输入新的用户名"
+              clearable
+              :maxlength="INPUT_LIMITS.usernameMax"
+              show-word-limit
+              @keyup.enter="saveAllProfile"
+            />
           </el-form-item>
 
           <el-form-item label="新密码">
-            <el-input v-model="editPassword" type="password" placeholder="若不修改请留空" show-password clearable @keyup.enter="saveAllProfile" />
+            <el-input
+              v-model="editPassword"
+              type="password"
+              placeholder="若不修改请留空，6-32位"
+              show-password
+              clearable
+              :maxlength="INPUT_LIMITS.passwordMax"
+              @keyup.enter="saveAllProfile"
+            />
           </el-form-item>
         </el-form>
 

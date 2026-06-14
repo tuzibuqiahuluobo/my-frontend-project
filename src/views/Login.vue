@@ -5,6 +5,7 @@ import { ElMessage } from 'element-plus' // 引入顶部消息提示插件
 // 【新增】引入我们用到的三个输入框前缀图标
 import { User, Lock, Message } from '@element-plus/icons-vue'
 import { apiRequest, saveStoredUser } from '../api'
+import { INPUT_LIMITS, normalizeEmail, validateEmailInput, validatePasswordInput, validateUsernameInput } from '../utils/inputRules'
 const router = useRouter()
 const isLoginMode = ref(true)
 const username = ref('')
@@ -39,15 +40,12 @@ let recoverTimer = null
 
 // 发送验证码的函数
 const sendCode = async () => {
-  // 1. 简单的邮箱格式校验
-  if (!email.value) {
-    ElMessage.warning('请先填写邮箱！')
+  const emailMessage = validateEmailInput(email.value)
+  if (emailMessage) {
+    ElMessage.warning(emailMessage)
     return
   }
-  if (!email.value.endsWith('@qq.com') && !email.value.endsWith('@gmail.com')) {
-    ElMessage.warning('目前仅支持 QQ 或 Gmail 邮箱哦')
-    return
-  }
+  email.value = normalizeEmail(email.value)
 
   // 2. 触发 60 秒倒计时机制
   countdown.value = 60
@@ -82,14 +80,12 @@ const openRecoverDialog = (mode) => {
 }
 
 const sendRecoverCode = async () => {
-  if (!recoverEmail.value) {
-    ElMessage.warning('请先填写绑定邮箱')
+  const emailMessage = validateEmailInput(recoverEmail.value)
+  if (emailMessage) {
+    ElMessage.warning(emailMessage)
     return
   }
-  if (!recoverEmail.value.endsWith('@qq.com') && !recoverEmail.value.endsWith('@gmail.com')) {
-    ElMessage.warning('目前仅支持 QQ 或 Gmail 邮箱哦')
-    return
-  }
+  recoverEmail.value = normalizeEmail(recoverEmail.value)
 
   // 找回流程也使用倒计时，避免用户频繁点击发送验证码。
   recoverCountdown.value = 60
@@ -118,9 +114,18 @@ const submitRecover = async () => {
     ElMessage.warning('邮箱和验证码不能为空')
     return
   }
-  if (recoverMode.value === 'password' && !recoverNewPassword.value) {
-    ElMessage.warning('请填写新密码')
+  const emailMessage = validateEmailInput(recoverEmail.value)
+  if (emailMessage) {
+    ElMessage.warning(emailMessage)
     return
+  }
+  recoverEmail.value = normalizeEmail(recoverEmail.value)
+  if (recoverMode.value === 'password') {
+    const passwordMessage = validatePasswordInput(recoverNewPassword.value)
+    if (passwordMessage) {
+      ElMessage.warning(passwordMessage)
+      return
+    }
   }
 
   recoverLoading.value = true
@@ -183,6 +188,24 @@ const submitForm = async () => {
     ElMessage.warning('账号和密码不能为空哦！')
     return
   }
+  const usernameMessage = validateUsernameInput(username.value)
+  if (usernameMessage) {
+    ElMessage.warning(usernameMessage)
+    return
+  }
+  const passwordMessage = validatePasswordInput(password.value)
+  if (passwordMessage) {
+    ElMessage.warning(passwordMessage)
+    return
+  }
+  if (!isLoginMode.value && !isAdminMode.value) {
+    const emailMessage = validateEmailInput(email.value)
+    if (emailMessage) {
+      ElMessage.warning(emailMessage)
+      return
+    }
+    email.value = normalizeEmail(email.value)
+  }
 
   loading.value = true // 开启按钮转圈
   const url = isLoginMode.value ? '/api/login' : '/api/register'
@@ -191,8 +214,8 @@ const submitForm = async () => {
     const data = await apiRequest(url, {
       method: 'POST',
       body: JSON.stringify({ 
-        username: username.value, 
-        password: password.value,
+        username: username.value.trim(),
+        password: password.value.trim(),
         email: email.value,
         code: code.value
        })
@@ -254,6 +277,8 @@ const submitForm = async () => {
         :placeholder="isAdminMode ? '请输入管理员账号' : '请输入用户名'" 
         clearable 
         size="large"
+        :maxlength="INPUT_LIMITS.usernameMax"
+        show-word-limit
         style="margin-bottom: 20px;"
         @keyup.enter="submitForm"
       >
@@ -266,6 +291,7 @@ const submitForm = async () => {
         :placeholder="isAdminMode ? '请输入管理员密码' : '请输入密码'" 
         show-password 
         size="large"
+        :maxlength="INPUT_LIMITS.passwordMax"
         style="margin-bottom: 25px;"
         @keyup.enter="submitForm"
       >
@@ -273,7 +299,7 @@ const submitForm = async () => {
       </el-input>
 
       <div v-if="!isLoginMode && !isAdminMode">
-        <el-input v-model="email" placeholder="请输入 QQ 或 Gmail 邮箱" clearable size="large" style="margin-bottom: 20px;">
+        <el-input v-model="email" placeholder="请输入 QQ 或 Gmail 邮箱" clearable size="large" :maxlength="INPUT_LIMITS.emailMax" style="margin-bottom: 20px;">
           <template #prefix><el-icon><Message /></el-icon></template>
         </el-input>
         <div style="display: flex; gap: 10px; margin-bottom: 25px;">
@@ -326,7 +352,7 @@ const submitForm = async () => {
       width="420px"
       align-center
     >
-      <el-input v-model="recoverEmail" placeholder="请输入绑定邮箱" clearable size="large" style="margin-bottom: 15px;">
+      <el-input v-model="recoverEmail" placeholder="请输入绑定邮箱" clearable size="large" :maxlength="INPUT_LIMITS.emailMax" style="margin-bottom: 15px;">
         <template #prefix><el-icon><Message /></el-icon></template>
       </el-input>
 
@@ -344,6 +370,7 @@ const submitForm = async () => {
         placeholder="请输入新密码（至少 6 位）"
         show-password
         size="large"
+        :maxlength="INPUT_LIMITS.passwordMax"
         style="margin-bottom: 15px;"
       >
         <template #prefix><el-icon><Lock /></el-icon></template>
