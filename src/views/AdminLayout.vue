@@ -14,6 +14,7 @@ import {
   UserFilled
 } from '@element-plus/icons-vue'
 import { apiRequest, clearStoredUser, getStoredUser, saveStoredUser } from '../api'
+import { AVATAR_MAX_BYTES, IMAGE_ACCEPT, assertImageFile, isGifFile, readFileAsDataUrl } from '../utils/imageTools'
 import { INPUT_LIMITS, normalizeEmail, validateEmailInput, validatePasswordInput, validateUsernameInput } from '../utils/inputRules'
 
 const router = useRouter()
@@ -143,23 +144,27 @@ const triggerAvatarUpload = () => {
   fileInputRef.value.click()
 }
 
-const onAvatarSelected = (event) => {
+const onAvatarSelected = async (event) => {
   const file = event.target.files[0]
   if (!file) return
 
-  if (file.size > 2 * 1024 * 1024) {
-    ElMessage.error('图片太大啦！请上传 2MB 以内的图片。')
-    return
-  }
+  try {
+    assertImageFile(file, AVATAR_MAX_BYTES, '头像')
+    if (isGifFile(file)) {
+      // GIF 动图进入裁剪器会丢失动画，所以管理员头像也直接保存原始动图。
+      adminForm.value.avatar = await readFileAsDataUrl(file)
+      ElMessage.success('GIF 头像已选择，保存资料后生效')
+      return
+    }
 
-  // FileReader 会把本地图片转成浏览器可预览的 base64，裁剪器需要这个格式来显示图片。
-  const reader = new FileReader()
-  reader.onload = (e) => {
-    rawImageUrl.value = e.target.result
+    // FileReader 会把本地图片转成浏览器可预览的 base64，裁剪器需要这个格式来显示图片。
+    rawImageUrl.value = await readFileAsDataUrl(file)
     cropDialogVisible.value = true
+  } catch (error) {
+    ElMessage.error(error.message || '头像读取失败，请重新选择')
+  } finally {
+    event.target.value = ''
   }
-  reader.readAsDataURL(file)
-  event.target.value = ''
 }
 
 const confirmAvatarCrop = () => {
@@ -330,7 +335,7 @@ onMounted(() => {
             </el-tooltip>
             <h3>{{ adminForm.username || '超级管理员' }}</h3>
             <p>{{ adminForm.email || '未填写邮箱' }}</p>
-            <input ref="fileInputRef" type="file" accept="image/*" style="display: none;" @change="onAvatarSelected">
+            <input ref="fileInputRef" type="file" :accept="IMAGE_ACCEPT" style="display: none;" @change="onAvatarSelected">
           </div>
           <div class="panel">
             <h3>修改超级管理员资料</h3>

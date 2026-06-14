@@ -5,6 +5,7 @@ import { ElMessage, ElMessageBox } from 'element-plus' // 新增引入 ElMessage
 import 'vue-cropper/dist/index.css'
 import { VueCropper } from 'vue-cropper'
 import { apiRequest, getStoredUser, saveStoredUser } from '../api'
+import { AVATAR_MAX_BYTES, IMAGE_ACCEPT, assertImageFile, isGifFile, readFileAsDataUrl } from '../utils/imageTools'
 import { INPUT_LIMITS, validateNicknameInput, validatePasswordInput, validateSignatureInput, validateUsernameInput } from '../utils/inputRules'
 
 const router = useRouter()
@@ -90,22 +91,27 @@ const triggerFileUpload = () => {
   fileInputRef.value.click()
 }
 
-const onFileSelected = (event) => {
+const onFileSelected = async (event) => {
   const file = event.target.files[0]
   if (!file) return
 
-  if (file.size > 2 * 1024 * 1024) {
-    ElMessage.error('图片太大啦！请上传 2MB 以内的图片。')
-    return
-  }
+  try {
+    assertImageFile(file, AVATAR_MAX_BYTES, '头像')
+    if (isGifFile(file)) {
+      // GIF 动图如果进入裁剪器会变成静态图，所以这里直接保存，保留头像动画效果。
+      const dataUrl = await readFileAsDataUrl(file)
+      updateProfile({ newAvatar: dataUrl })
+      return
+    }
 
-  const reader = new FileReader()
-  reader.onload = (e) => {
-    rawImageUrl.value = e.target.result
+    const dataUrl = await readFileAsDataUrl(file)
+    rawImageUrl.value = dataUrl
     cropDialogVisible.value = true
+  } catch (error) {
+    ElMessage.error(error.message || '头像读取失败，请重新选择')
+  } finally {
+    event.target.value = ''
   }
-  reader.readAsDataURL(file)
-  event.target.value = ''
 }
 
 const confirmCrop = () => {
@@ -209,9 +215,9 @@ const saveAllProfile = () => {
               <el-avatar :src="currentUser.avatar" :size="100" class="settings-avatar" />
             </div>
           </el-tooltip>
-          <p class="avatar-tip">点击头像即可更换 (支持 JPG/PNG，最大 2MB)</p>
+          <p class="avatar-tip">点击头像即可更换 (支持 JPG/PNG/WEBP/GIF，最大 2MB)</p>
 
-          <input type="file" ref="fileInputRef" style="display: none;" accept="image/*" @change="onFileSelected" />
+          <input type="file" ref="fileInputRef" style="display: none;" :accept="IMAGE_ACCEPT" @change="onFileSelected" />
         </div>
 
         <el-form label-width="100px" style="max-width: 450px; margin: 0 auto;">

@@ -14,8 +14,8 @@ const sensitiveWords = [
   '赌博', '博彩', '诈骗', '外挂', '代刷', '色情', '约炮', '毒品'
 ]
 
-const passwordSpecialChars = '！!@#￥%*&'
-const passwordSpecialCharsText = '！@#￥%*&'
+const passwordSpecialChars = '！!@#￥%*&.'
+const passwordSpecialCharsText = '！@#￥%*&.'
 
 export const textLength = (value) => {
   // 用 Array.from 统计用户看见的字符数，中文、英文和常见符号都更接近“字数”的直觉。

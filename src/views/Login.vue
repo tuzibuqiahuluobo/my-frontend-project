@@ -10,7 +10,9 @@ const router = useRouter()
 const isLoginMode = ref(true)
 const username = ref('')
 const password = ref('')
+const confirmPassword = ref('')
 const loading = ref(false) // 增加一个加载状态，点击时按钮会转圈
+const focusedField = ref('')
 
 // 控制是否进入管理员模式
 const isAdminMode = ref(false)
@@ -22,6 +24,48 @@ let clickTimer = null
 // 新增注册专用的变量
 const email = ref('')
 const code = ref('')
+
+const fieldRules = {
+  username: [
+    `账号长度 ${INPUT_LIMITS.usernameMin}-${INPUT_LIMITS.usernameMax} 个字`,
+    '必须以英文字母开头',
+    '不能包含管理员、官方、脏话等敏感词'
+  ],
+  password: [
+    `密码长度 ${INPUT_LIMITS.passwordMin}-${INPUT_LIMITS.passwordMax} 个字`,
+    '必须同时包含大写字母、小写字母和数字',
+    '特殊字符只能使用：！ @ # ￥ % * & .'
+  ],
+  confirmPassword: [
+    '请再次输入同一个密码',
+    '两次密码完全一致后才能注册'
+  ],
+  email: [
+    '只支持 QQ 邮箱或 Gmail 邮箱',
+    '邮箱用于接收验证码和找回账号/密码'
+  ],
+  code: [
+    '请输入邮箱收到的 6 位验证码',
+    '验证码有有效期，过期后需要重新获取'
+  ]
+}
+
+const showRules = (field) => {
+  // 只记录当前聚焦的输入框名称，模板根据它决定显示哪一组规则；点击空白处触发 blur 后会自动收起。
+  focusedField.value = field
+}
+
+const hideRules = () => {
+  focusedField.value = ''
+}
+
+const switchLoginMode = () => {
+  // 登录/注册切换时清空注册专用字段，避免旧的确认密码或验证码影响下一次提交。
+  isLoginMode.value = !isLoginMode.value
+  confirmPassword.value = ''
+  code.value = ''
+  focusedField.value = ''
+}
 
 // 倒计时核心逻辑
 const countdown = ref(0)
@@ -77,6 +121,7 @@ const openRecoverDialog = (mode) => {
   recoverCode.value = ''
   recoverNewPassword.value = ''
   recoverResult.value = ''
+  focusedField.value = ''
 }
 
 const sendRecoverCode = async () => {
@@ -181,6 +226,8 @@ const exitAdminMode = () => {
   isAdminMode.value = false
   username.value = ''
   password.value = ''
+  confirmPassword.value = ''
+  focusedField.value = ''
 }
 
 const submitForm = async () => {
@@ -199,9 +246,21 @@ const submitForm = async () => {
     return
   }
   if (!isLoginMode.value && !isAdminMode.value) {
+    if (!confirmPassword.value) {
+      ElMessage.warning('请再输入一次密码')
+      return
+    }
+    if (password.value.trim() !== confirmPassword.value.trim()) {
+      ElMessage.warning('两次输入的密码不一致')
+      return
+    }
     const emailMessage = validateEmailInput(email.value)
     if (emailMessage) {
       ElMessage.warning(emailMessage)
+      return
+    }
+    if (!code.value.trim()) {
+      ElMessage.warning('验证码不能为空')
       return
     }
     email.value = normalizeEmail(email.value)
@@ -217,7 +276,7 @@ const submitForm = async () => {
         username: username.value.trim(),
         password: password.value.trim(),
         email: email.value,
-        code: code.value
+        code: code.value.trim()
        })
     })
     
@@ -279,11 +338,16 @@ const submitForm = async () => {
         size="large"
         :maxlength="INPUT_LIMITS.usernameMax"
         show-word-limit
-        style="margin-bottom: 20px;"
+        class="auth-input"
+        @focus="showRules('username')"
+        @blur="hideRules"
         @keyup.enter="submitForm"
       >
         <template #prefix><el-icon><User /></el-icon></template>
       </el-input>
+      <div v-if="focusedField === 'username'" class="input-rules" :class="{ 'is-admin': isAdminMode }">
+        <p v-for="rule in fieldRules.username" :key="rule">{{ rule }}</p>
+      </div>
       
       <el-input 
         v-model="password" 
@@ -292,21 +356,68 @@ const submitForm = async () => {
         show-password 
         size="large"
         :maxlength="INPUT_LIMITS.passwordMax"
-        style="margin-bottom: 25px;"
+        class="auth-input"
+        @focus="showRules('password')"
+        @blur="hideRules"
         @keyup.enter="submitForm"
       >
         <template #prefix><el-icon><Lock /></el-icon></template>
       </el-input>
+      <div v-if="focusedField === 'password'" class="input-rules" :class="{ 'is-admin': isAdminMode }">
+        <p v-for="rule in fieldRules.password" :key="rule">{{ rule }}</p>
+      </div>
 
       <div v-if="!isLoginMode && !isAdminMode">
-        <el-input v-model="email" placeholder="请输入 QQ 或 Gmail 邮箱" clearable size="large" :maxlength="INPUT_LIMITS.emailMax" style="margin-bottom: 20px;">
+        <el-input 
+          v-model="confirmPassword"
+          type="password"
+          placeholder="请再次输入密码"
+          show-password
+          size="large"
+          :maxlength="INPUT_LIMITS.passwordMax"
+          class="auth-input"
+          @focus="showRules('confirmPassword')"
+          @blur="hideRules"
+          @keyup.enter="submitForm"
+        >
+          <template #prefix><el-icon><Lock /></el-icon></template>
+        </el-input>
+        <div v-if="focusedField === 'confirmPassword'" class="input-rules">
+          <p v-for="rule in fieldRules.confirmPassword" :key="rule">{{ rule }}</p>
+        </div>
+
+        <el-input
+          v-model="email"
+          placeholder="请输入 QQ 或 Gmail 邮箱"
+          clearable
+          size="large"
+          :maxlength="INPUT_LIMITS.emailMax"
+          class="auth-input"
+          @focus="showRules('email')"
+          @blur="hideRules"
+        >
           <template #prefix><el-icon><Message /></el-icon></template>
         </el-input>
-        <div style="display: flex; gap: 10px; margin-bottom: 25px;">
-          <el-input v-model="code" placeholder="请输入 6 位验证码" size="large" style="flex-grow: 1;" />
+        <div v-if="focusedField === 'email'" class="input-rules">
+          <p v-for="rule in fieldRules.email" :key="rule">{{ rule }}</p>
+        </div>
+
+        <div style="display: flex; gap: 10px;">
+          <el-input
+            v-model="code"
+            placeholder="请输入 6 位验证码"
+            size="large"
+            style="flex-grow: 1;"
+            @focus="showRules('code')"
+            @blur="hideRules"
+            @keyup.enter="submitForm"
+          />
           <el-button size="large" type="primary" plain :disabled="countdown > 0" @click="sendCode" style="width: 120px;">
             {{ countdown > 0 ? `${countdown}s 后重发` : '获取验证码' }}
           </el-button>
+        </div>
+        <div v-if="focusedField === 'code'" class="input-rules">
+          <p v-for="rule in fieldRules.code" :key="rule">{{ rule }}</p>
         </div>
       </div>
 
@@ -325,7 +436,7 @@ const submitForm = async () => {
           v-if="!isAdminMode"
           type="primary" 
           link 
-          @click="isLoginMode = !isLoginMode"
+          @click="switchLoginMode"
         >
           {{ isLoginMode ? '没有账号？点我注册' : '已有账号？返回登录' }}
         </el-button>
@@ -352,15 +463,37 @@ const submitForm = async () => {
       width="420px"
       align-center
     >
-      <el-input v-model="recoverEmail" placeholder="请输入绑定邮箱" clearable size="large" :maxlength="INPUT_LIMITS.emailMax" style="margin-bottom: 15px;">
+      <el-input
+        v-model="recoverEmail"
+        placeholder="请输入绑定邮箱"
+        clearable
+        size="large"
+        :maxlength="INPUT_LIMITS.emailMax"
+        class="auth-input"
+        @focus="showRules('recoverEmail')"
+        @blur="hideRules"
+      >
         <template #prefix><el-icon><Message /></el-icon></template>
       </el-input>
+      <div v-if="focusedField === 'recoverEmail'" class="input-rules">
+        <p v-for="rule in fieldRules.email" :key="rule">{{ rule }}</p>
+      </div>
 
-      <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-        <el-input v-model="recoverCode" placeholder="请输入验证码" size="large" style="flex-grow: 1;" />
+      <div style="display: flex; gap: 10px;">
+        <el-input
+          v-model="recoverCode"
+          placeholder="请输入验证码"
+          size="large"
+          style="flex-grow: 1;"
+          @focus="showRules('recoverCode')"
+          @blur="hideRules"
+        />
         <el-button size="large" type="primary" plain :disabled="recoverCountdown > 0" @click="sendRecoverCode" style="width: 120px;">
           {{ recoverCountdown > 0 ? `${recoverCountdown}s` : '获取验证码' }}
         </el-button>
+      </div>
+      <div v-if="focusedField === 'recoverCode'" class="input-rules">
+        <p v-for="rule in fieldRules.code" :key="rule">{{ rule }}</p>
       </div>
 
       <el-input
@@ -371,10 +504,15 @@ const submitForm = async () => {
         show-password
         size="large"
         :maxlength="INPUT_LIMITS.passwordMax"
-        style="margin-bottom: 15px;"
+        class="auth-input"
+        @focus="showRules('recoverPassword')"
+        @blur="hideRules"
       >
         <template #prefix><el-icon><Lock /></el-icon></template>
       </el-input>
+      <div v-if="focusedField === 'recoverPassword'" class="input-rules">
+        <p v-for="rule in fieldRules.password" :key="rule">{{ rule }}</p>
+      </div>
 
       <el-alert v-if="recoverResult" :title="recoverResult" type="success" show-icon :closable="false" style="margin-bottom: 15px;" />
 
@@ -387,3 +525,28 @@ const submitForm = async () => {
     </el-dialog>
   </div>
 </template>
+
+<style scoped>
+.auth-input {
+  margin-bottom: 12px;
+}
+
+.input-rules {
+  margin: -4px 0 14px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(64, 158, 255, 0.08);
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.input-rules.is-admin {
+  background: rgba(245, 108, 108, 0.12);
+  color: #c0c4cc;
+}
+
+.input-rules p {
+  margin: 0;
+}
+</style>

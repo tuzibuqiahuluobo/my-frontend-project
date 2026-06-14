@@ -87,9 +87,10 @@ const goToPostDetail = (postId) => {
   router.push(`/main/community/post/${postId}`)
 }
 
-const postPreview = (content) => {
+const postPreview = (content, hasImage = false) => {
   // 收藏区只做简洁预览，内容太长时截断，真正阅读全文交给详情页。
   const text = String(content || '').trim()
+  if (!text && hasImage) return '图片动态'
   return text.length > 80 ? `${text.slice(0, 80)}...` : text
 }
 </script>
@@ -140,7 +141,8 @@ const postPreview = (content) => {
                 <div class="favorite-time">{{ formatDate(post.created_at) }}</div>
               </div>
             </div>
-            <p class="favorite-preview">{{ postPreview(post.content) }}</p>
+            <img v-if="post.image" class="favorite-image" :src="post.image" alt="收藏帖子图片" loading="lazy" />
+            <p class="favorite-preview">{{ postPreview(post.content, Boolean(post.image)) }}</p>
             <div class="favorite-meta">
               <span>评论 {{ post.comments ? post.comments.length : 0 }} · 收藏 {{ post.favorite_count }}</span>
               <el-button type="warning" plain size="small" :icon="StarFilled" @click.stop="toggleFavorite(post)">
@@ -250,6 +252,16 @@ const postPreview = (content) => {
   font-size: 14px;
   line-height: 1.7;
   margin-bottom: 12px;
+}
+
+.favorite-image {
+  display: block;
+  width: 100%;
+  height: 150px;
+  object-fit: cover;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  background: #f8fafc;
 }
 
 .favorite-meta {

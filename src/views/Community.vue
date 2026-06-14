@@ -2,9 +2,10 @@
 import { computed, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ChatDotRound, Star, StarFilled, Delete } from '@element-plus/icons-vue'
+import { ChatDotRound, Star, StarFilled, Delete, Picture } from '@element-plus/icons-vue'
 import { apiRequest, getStoredUser, isAdmin } from '../api'
 import TwemojiIcon from '../components/TwemojiIcon.vue'
+import { IMAGE_ACCEPT, compressPostImage } from '../utils/imageTools'
 import { buildTwemojiCatalog, findTwemojiByCodePoint } from '../utils/twemojiCatalog'
 
 const router = useRouter()
@@ -14,7 +15,10 @@ const loading = ref(true)
 // 【新增】发帖相关的变量
 const currentUser = ref({ uid: null, username: '匿名', nickname: '', avatar: '', role: 0, token: '' })
 const newPostContent = ref('')
+const postImage = ref('')
+const postImageInputRef = ref(null)
 const isSubmitting = ref(false)
+const isProcessingImage = ref(false)
 const emojiPageSize = 40
 const emojiPage = ref(1)
 // 表情数据由 Twemoji 解析器筛选生成，不在页面代码里手动维护一长串 emoji。
@@ -64,7 +68,7 @@ onMounted(() => {
 
 // 发送帖子的核心函数
 const submitPost = async () => {
-  if (!newPostContent.value.trim()) {
+  if (!newPostContent.value.trim() && !postImage.value) {
     ElMessage.warning('好歹写点什么再发呀！')
     return
   }
@@ -74,12 +78,14 @@ const submitPost = async () => {
     const data = await apiRequest('/api/create-post', {
       method: 'POST',
       body: JSON.stringify({
-        content: newPostContent.value
+        content: newPostContent.value,
+        image: postImage.value
       })
     })
 
     ElMessage.success(data.message)
     newPostContent.value = '' // 清空输入框
+    postImage.value = ''
     loadPosts() // 加载新帖子
   } catch (error) {
     ElMessage.error(error.message || '网络错误，发送失败')
@@ -91,6 +97,44 @@ const submitPost = async () => {
 const addEmojiToPost = (emoji) => {
   // 点击表情时直接追加到输入框末尾，初学阶段这样最直观，也不会打断已有输入内容。
   newPostContent.value += emoji
+}
+
+const triggerPostImageUpload = () => {
+  postImageInputRef.value?.click()
+}
+
+const handlePostImageFile = async (file) => {
+  if (!file) return
+
+  isProcessingImage.value = true
+  try {
+    // 发帖图片统一在前端压缩，减少请求体积，也能让列表里的图片加载更快。
+    postImage.value = await compressPostImage(file)
+    ElMessage.success('图片已添加')
+  } catch (error) {
+    ElMessage.error(error.message || '图片处理失败，请重新选择')
+  } finally {
+    isProcessingImage.value = false
+  }
+}
+
+const onPostImageSelected = (event) => {
+  handlePostImageFile(event.target.files[0])
+  event.target.value = ''
+}
+
+const handlePostPaste = (event) => {
+  const items = Array.from(event.clipboardData?.items || [])
+  const imageItem = items.find(item => item.type.startsWith('image/'))
+  if (!imageItem) return
+
+  // 用户粘贴图片时阻止浏览器把图片文件名或无意义内容塞进文本框，只保留真正的图片预览。
+  event.preventDefault()
+  handlePostImageFile(imageItem.getAsFile())
+}
+
+const removePostImage = () => {
+  postImage.value = ''
 }
 
 const goToPostDetail = (postId) => {
@@ -206,7 +250,7 @@ const formatDate = (timeString) => {
     <el-card class="publish-card" shadow="never">
       <div class="publish-area">
         <el-avatar :size="45" :src="currentUser.avatar" />
-        <div class="publish-main">
+        <div class="publish-main" @paste.capture="handlePostPaste">
           <el-input
             v-model="newPostContent"
             type="textarea"
@@ -217,39 +261,59 @@ const formatDate = (timeString) => {
             class="publish-input"
           />
 
+          <div v-if="postImage || isProcessingImage" class="post-image-preview">
+            <el-skeleton v-if="isProcessingImage" :rows="1" animated />
+            <template v-else>
+              <img :src="postImage" alt="待发布图片预览" />
+              <button type="button" class="remove-image-button" @click="removePostImage">移除</button>
+            </template>
+          </div>
+
           <div class="publish-action">
-            <el-popover placement="bottom-start" trigger="click" width="340">
-              <template #reference>
-                <button class="emoji-trigger" type="button" title="添加表情">
-                  <TwemojiIcon :emoji="emojiButtonIcon" />
-                </button>
-              </template>
-              <div class="emoji-panel">
-                <button
-                  v-for="emoji in pagedEmojiList"
-                  :key="emoji"
-                  class="emoji-item"
-                  type="button"
-                  @click="addEmojiToPost(emoji)"
-                >
-                  <TwemojiIcon :emoji="emoji" />
-                </button>
-              </div>
-              <div class="emoji-pagination">
-                <el-pagination
-                  v-model:current-page="emojiPage"
-                  size="small"
-                  layout="prev, pager, next"
-                  :page-size="emojiPageSize"
-                  :total="emojiList.length"
-                  :pager-count="5"
-                />
-                <span class="emoji-page-text">{{ emojiPage }} / {{ emojiPageCount }}</span>
-              </div>
-            </el-popover>
+            <div class="publish-tools">
+              <el-popover placement="bottom-start" trigger="click" width="340">
+                <template #reference>
+                  <button class="tool-trigger emoji-trigger" type="button" title="添加表情">
+                    <TwemojiIcon :emoji="emojiButtonIcon" />
+                  </button>
+                </template>
+                <div class="emoji-panel">
+                  <button
+                    v-for="emoji in pagedEmojiList"
+                    :key="emoji"
+                    class="emoji-item"
+                    type="button"
+                    @click="addEmojiToPost(emoji)"
+                  >
+                    <TwemojiIcon :emoji="emoji" />
+                  </button>
+                </div>
+                <div class="emoji-pagination">
+                  <el-pagination
+                    v-model:current-page="emojiPage"
+                    size="small"
+                    layout="prev, pager, next"
+                    :page-size="emojiPageSize"
+                    :total="emojiList.length"
+                    :pager-count="5"
+                  />
+                  <span class="emoji-page-text">{{ emojiPage }} / {{ emojiPageCount }}</span>
+                </div>
+              </el-popover>
+              <button
+                class="tool-trigger image-trigger"
+                type="button"
+                title="添加图片"
+                :disabled="isProcessingImage"
+                @click="triggerPostImageUpload"
+              >
+                <el-icon><Picture /></el-icon>
+              </button>
+              <input ref="postImageInputRef" type="file" :accept="IMAGE_ACCEPT" style="display: none;" @change="onPostImageSelected">
+            </div>
             <el-button 
               type="primary" 
-              :loading="isSubmitting" 
+              :loading="isSubmitting || isProcessingImage" 
               @click="submitPost" 
               round
               size="large"
@@ -280,6 +344,15 @@ const formatDate = (timeString) => {
         <div class="post-content" @click="goToPostDetail(post.id)">
           {{ post.content }}
         </div>
+
+        <img
+          v-if="post.image"
+          class="post-image"
+          :src="post.image"
+          alt="帖子图片"
+          loading="lazy"
+          @click="goToPostDetail(post.id)"
+        />
         
         <div class="post-footer">
           
@@ -395,7 +468,13 @@ const formatDate = (timeString) => {
   margin-top: 15px;
 }
 
-.emoji-trigger {
+.publish-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.tool-trigger {
   width: 42px;
   height: 42px;
   border: 1px solid #dcdfe6;
@@ -410,10 +489,20 @@ const formatDate = (timeString) => {
   transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
 }
 
-.emoji-trigger:hover {
+.tool-trigger:hover:not(:disabled) {
   border-color: #38bdf8;
   box-shadow: 0 4px 12px rgba(56, 189, 248, 0.22);
   transform: translateY(-1px);
+}
+
+.tool-trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.image-trigger {
+  color: #38bdf8;
+  font-size: 20px;
 }
 
 .publish-button {
@@ -456,6 +545,35 @@ const formatDate = (timeString) => {
 .emoji-page-text {
   font-size: 12px;
   color: #909399;
+}
+
+.post-image-preview {
+  position: relative;
+  width: min(260px, 100%);
+  margin-top: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #f8fafc;
+}
+
+.post-image-preview img {
+  display: block;
+  width: 100%;
+  max-height: 180px;
+  object-fit: cover;
+}
+
+.remove-image-button {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  border: none;
+  border-radius: 999px;
+  padding: 4px 10px;
+  color: #ffffff;
+  background: rgba(15, 23, 42, 0.72);
+  cursor: pointer;
 }
 
 /* ==================== 
@@ -506,6 +624,17 @@ const formatDate = (timeString) => {
   line-height: 1.6;
   margin-bottom: 15px;
   white-space: pre-wrap;
+  cursor: pointer;
+}
+
+.post-image {
+  display: block;
+  width: 100%;
+  max-height: 520px;
+  object-fit: contain;
+  border-radius: 8px;
+  margin: 0 0 15px;
+  background: #f8fafc;
   cursor: pointer;
 }
 

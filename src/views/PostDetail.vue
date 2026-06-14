@@ -119,6 +119,14 @@ onMounted(() => {
 
       <div class="post-content">{{ post.content }}</div>
 
+      <img
+        v-if="post.image"
+        class="detail-image"
+        :src="post.image"
+        alt="帖子图片"
+        loading="lazy"
+      />
+
       <div class="post-stats">
         <span><el-icon><ChatDotRound /></el-icon> {{ post.comments ? post.comments.length : 0 }} 条评论</span>
         <span>{{ post.favorite_count }} 次收藏</span>
@@ -230,7 +238,17 @@ onMounted(() => {
   font-size: 18px;
   line-height: 1.8;
   white-space: pre-wrap;
-  margin: 24px 0;
+  margin: 24px 0 16px;
+}
+
+.detail-image {
+  display: block;
+  width: 100%;
+  max-height: 680px;
+  object-fit: contain;
+  border-radius: 8px;
+  margin: 0 0 24px;
+  background: #f8fafc;
 }
 
 .post-stats,
