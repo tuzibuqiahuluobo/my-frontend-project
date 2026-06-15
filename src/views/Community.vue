@@ -391,7 +391,13 @@ const formatDate = (timeString) => {
     <el-skeleton :rows="5" animated v-if="loading" />
 
     <div v-else class="post-list">
-      <el-card v-for="post in posts" :key="post.id" class="post-card" shadow="hover">
+      <el-card
+        v-for="post in posts"
+        :key="post.id"
+        class="post-card"
+        :class="getPostImages(post).length > 0 ? 'has-images' : 'no-images'"
+        shadow="hover"
+      >
         
         <div class="post-header">
           <el-avatar :size="40" :src="post.avatar" />
@@ -687,9 +693,12 @@ const formatDate = (timeString) => {
 }
 
 .post-card :deep(.el-card__body) {
-  min-height: 360px;
   display: flex;
   flex-direction: column;
+}
+
+.post-card.has-images :deep(.el-card__body) {
+  min-height: 360px;
 }
 
 .post-header {
@@ -774,6 +783,10 @@ const formatDate = (timeString) => {
 .post-footer {
   border-top: 1px solid #ebeef5; 
   padding-top: 12px;
+  margin-top: 12px;
+}
+
+.post-card.has-images .post-footer {
   margin-top: auto;
 }
 

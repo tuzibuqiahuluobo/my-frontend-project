@@ -67,7 +67,7 @@ const gameCards = [
   <div class="game-center-page">
     <section class="game-header">
       <div>
-        <h1>游戏中心</h1>
+        <h1>游戏中心（暂未开发）</h1>
         <p>这里会集中展示可以直接在网页里运行的小游戏。</p>
       </div>
       <span class="game-count">{{ gameCards.length }} 个占位游戏</span>
