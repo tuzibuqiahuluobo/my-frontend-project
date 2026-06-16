@@ -98,6 +98,14 @@ const hasPostTitle = (post) => {
   return String(post.title || '').trim() !== ''
 }
 
+const getPostTags = (post) => {
+  return Array.isArray(post.tags) ? post.tags.filter(Boolean) : []
+}
+
+const shouldShowTopic = (post) => {
+  return post.topic_name && post.topic_name !== '综合社区'
+}
+
 const postPreview = (content, hasImage = false) => {
   // 收藏区只做简洁预览，内容太长时截断，真正阅读全文交给详情页。
   const text = String(content || '').trim()
@@ -153,6 +161,10 @@ const postPreview = (content, hasImage = false) => {
               </div>
             </div>
             <h4 v-if="hasPostTitle(post)" class="favorite-post-title">{{ post.title }}</h4>
+            <div v-if="shouldShowTopic(post) || getPostTags(post).length" class="favorite-pill-row">
+              <el-tag v-if="shouldShowTopic(post)" class="favorite-topic-tag" size="small" effect="plain">{{ post.topic_name }}</el-tag>
+              <span v-for="tag in getPostTags(post)" :key="tag" class="favorite-tag-pill">#{{ tag }}</span>
+            </div>
             <PostImageGrid :images="postImages(post)" compact />
             <p class="favorite-preview">{{ postPreview(post.content, postImages(post).length > 0) }}</p>
             <div class="favorite-meta">
@@ -264,6 +276,23 @@ const postPreview = (content, hasImage = false) => {
   color: #303133;
   font-size: 15px;
   line-height: 1.4;
+}
+
+.favorite-pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.favorite-tag-pill {
+  border-radius: 999px;
+  padding: 5px 8px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1;
 }
 
 .favorite-preview {

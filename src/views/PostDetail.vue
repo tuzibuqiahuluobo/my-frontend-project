@@ -29,6 +29,23 @@ const hasPostTitle = (targetPost) => {
   return String(targetPost?.title || '').trim() !== ''
 }
 
+const getPostTags = (targetPost) => {
+  return Array.isArray(targetPost?.tags) ? targetPost.tags.filter(Boolean) : []
+}
+
+const shouldShowTopic = (targetPost) => {
+  return targetPost?.topic_name && targetPost.topic_name !== '综合社区'
+}
+
+const backToCommunity = () => {
+  // 新增：详情页知道帖子所属话题时，返回社区就带上 topic_id，用户不会迷路到默认社区。
+  if (post.value?.topic_id) {
+    router.push(`/main/community?topic_id=${post.value.topic_id}`)
+    return
+  }
+  router.back()
+}
+
 const loadPostDetail = async () => {
   loading.value = true
   try {
@@ -114,7 +131,7 @@ onMounted(() => {
 
 <template>
   <div class="detail-container">
-    <el-button :icon="ArrowLeft" link class="back-button" @click="router.back()">返回</el-button>
+    <el-button :icon="ArrowLeft" link class="back-button" @click="backToCommunity">返回</el-button>
 
     <el-skeleton v-if="loading" :rows="8" animated />
 
@@ -126,6 +143,12 @@ onMounted(() => {
           <span v-if="post.signature" class="signature">{{ post.signature }}</span>
           <span class="time">{{ formatDate(post.created_at) }}</span>
         </div>
+      </div>
+      <div v-if="shouldShowTopic(post) || getPostTags(post).length" class="detail-pill-row">
+        <el-tag v-if="shouldShowTopic(post)" class="detail-topic-tag" size="small" effect="plain">
+          {{ post.topic_name }}
+        </el-tag>
+        <span v-for="tag in getPostTags(post)" :key="tag" class="detail-tag-pill">#{{ tag }}</span>
       </div>
 
       <h1 v-if="hasPostTitle(post)" class="detail-title">{{ post.title }}</h1>
@@ -233,6 +256,23 @@ onMounted(() => {
   font-size: 13px;
   color: #6b7280;
   margin-top: 4px;
+}
+
+.detail-pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.detail-tag-pill {
+  border-radius: 999px;
+  padding: 6px 9px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1;
 }
 
 .comment-time {

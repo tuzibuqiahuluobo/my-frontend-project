@@ -1,11 +1,12 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import 'vue-cropper/dist/index.css'
 import { VueCropper } from 'vue-cropper'
 import {
   ChatDotRound,
+  Collection,
   Grid,
   Lock,
   Message,
@@ -24,6 +25,43 @@ const loading = ref(false)
 const currentAdmin = ref({ uid: null, username: '', nickname: '', avatar: '', email: '', role: 2, token: '' })
 const userList = ref([])
 const postList = ref([])
+const topicList = ref([])
+const topicSearch = ref('')
+const topicDialogVisible = ref(false)
+const savingTopic = ref(false)
+const topicForm = ref({
+  topic_id: null,
+  name: '',
+  description: '',
+  sort_order: 100,
+  status: 'approved'
+})
+const topicStatusText = {
+  pending: '待审核',
+  approved: '已通过',
+  disabled: '已停用',
+  rejected: '已拒绝'
+}
+const topicStatusType = {
+  pending: 'warning',
+  approved: 'success',
+  disabled: 'info',
+  rejected: 'danger'
+}
+const activeTitle = computed(() => ({
+  overview: '后台概览',
+  profile: '管理员资料',
+  users: '用户管理',
+  posts: '动态管理',
+  topics: '话题管理'
+}[activeTab.value] || '后台概览'))
+const filteredTopics = computed(() => {
+  const keyword = topicSearch.value.trim().toLowerCase()
+  if (!keyword) return topicList.value
+  return topicList.value.filter(topic => {
+    return `${topic.name} ${topic.description} ${topic.status}`.toLowerCase().includes(keyword)
+  })
+})
 
 const adminForm = ref({
   username: '',
@@ -71,12 +109,104 @@ const fetchAllUsers = async () => {
 const fetchAllPosts = async () => {
   loading.value = true
   try {
-    postList.value = await apiRequest('/api/posts')
+    postList.value = await apiRequest('/api/posts?all=1')
   } catch (error) {
     ElMessage.error(error.message || '帖子数据读取失败')
   } finally {
     loading.value = false
   }
+}
+
+const fetchAllTopics = async () => {
+  loading.value = true
+  try {
+    topicList.value = await apiRequest('/api/admin/topics')
+  } catch (error) {
+    ElMessage.error(error.message || '话题数据读取失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+const openTopicDialog = (topic = null) => {
+  // 新增：新增和编辑共用一个弹窗，初学阶段能少维护一套重复表单。
+  topicForm.value = topic
+    ? {
+        topic_id: topic.id,
+        name: topic.name,
+        description: topic.description || '',
+        sort_order: topic.sort_order || 100,
+        status: topic.status || 'approved'
+      }
+    : {
+        topic_id: null,
+        name: '',
+        description: '',
+        sort_order: 100,
+        status: 'approved'
+      }
+  topicDialogVisible.value = true
+}
+
+const saveTopic = async () => {
+  if (!topicForm.value.name.trim()) {
+    ElMessage.warning('请填写话题名称')
+    return
+  }
+  savingTopic.value = true
+  try {
+    const isEditing = Boolean(topicForm.value.topic_id)
+    const data = await apiRequest(isEditing ? '/api/admin/topics/update' : '/api/admin/topics/create', {
+      method: 'POST',
+      body: JSON.stringify({
+        topic_id: topicForm.value.topic_id,
+        name: topicForm.value.name.trim(),
+        description: topicForm.value.description.trim(),
+        sort_order: Number(topicForm.value.sort_order) || 100,
+        status: topicForm.value.status
+      })
+    })
+    ElMessage.success(data.message)
+    topicDialogVisible.value = false
+    fetchAllTopics()
+  } catch (error) {
+    ElMessage.error(error.message || '话题保存失败')
+  } finally {
+    savingTopic.value = false
+  }
+}
+
+const reviewTopic = async (topic, status) => {
+  try {
+    const data = await apiRequest('/api/admin/topics/review', {
+      method: 'POST',
+      body: JSON.stringify({ topic_id: topic.id, status })
+    })
+    ElMessage.success(data.message)
+    fetchAllTopics()
+  } catch (error) {
+    ElMessage.error(error.message || '话题状态更新失败')
+  }
+}
+
+const deleteTopic = (topic) => {
+  ElMessageBox.confirm(
+    `确定删除话题「${topic.name}」吗？如果里面有帖子，会先迁移到综合社区。`,
+    '删除话题',
+    { confirmButtonText: '确认删除', cancelButtonText: '取消', type: 'warning' }
+  ).then(async () => {
+    try {
+      const data = await apiRequest('/api/admin/topics/delete', {
+        method: 'POST',
+        body: JSON.stringify({ topic_id: topic.id })
+      })
+      ElMessage.success(data.message)
+      fetchAllTopics()
+      fetchAllPosts()
+    } catch (error) {
+      ElMessage.error(error.message || '话题删除失败')
+    }
+  })
 }
 
 const saveAdminProfile = async () => {
@@ -221,12 +351,14 @@ const exitCommandCenter = () => {
 const handleTabClick = () => {
   if (activeTab.value === 'users') fetchAllUsers()
   if (activeTab.value === 'posts') fetchAllPosts()
+  if (activeTab.value === 'topics') fetchAllTopics()
 }
 
 onMounted(() => {
   loadCurrentAdmin()
   fetchAllUsers()
   fetchAllPosts()
+  fetchAllTopics()
 })
 </script>
 
@@ -264,6 +396,10 @@ onMounted(() => {
           <el-icon><ChatDotRound /></el-icon>
           <template #title>动态管理</template>
         </el-menu-item>
+        <el-menu-item index="topics">
+          <el-icon><Collection /></el-icon>
+          <template #title>话题管理</template>
+        </el-menu-item>
       </el-menu>
 
       <el-button class="logout-button" type="danger" plain :icon="SwitchButton" @click="exitCommandCenter">
@@ -275,7 +411,7 @@ onMounted(() => {
       <header class="content-header">
         <div>
           <span class="eyebrow">SunShine 管理中心</span>
-          <h1>{{ activeTab === 'overview' ? '后台概览' : activeTab === 'profile' ? '管理员资料' : activeTab === 'users' ? '用户管理' : '动态管理' }}</h1>
+          <h1>{{ activeTitle }}</h1>
         </div>
       </header>
 
@@ -407,6 +543,7 @@ onMounted(() => {
           <div class="panel">
             <el-table :data="postList" v-loading="loading" style="width: 100%">
               <el-table-column prop="id" label="ID" width="80" />
+              <el-table-column prop="topic_name" label="话题" width="130" />
               <el-table-column prop="username" label="发布者" width="150" />
               <el-table-column prop="content" label="内容" show-overflow-tooltip />
               <el-table-column label="时间" width="180">
@@ -424,8 +561,74 @@ onMounted(() => {
             </el-table>
           </div>
         </div>
+
+        <div v-if="activeTab === 'topics'" class="panel">
+          <div class="section-title">
+            <h3>话题列表</h3>
+            <span>{{ topicList.length }} 个话题</span>
+          </div>
+          <div class="topic-toolbar">
+            <el-input v-model="topicSearch" placeholder="搜索话题名称、简介或状态" clearable />
+            <el-button type="primary" @click="openTopicDialog()">新增话题</el-button>
+          </div>
+          <div class="panel">
+            <el-table :data="filteredTopics" v-loading="loading" style="width: 100%">
+              <el-table-column prop="id" label="ID" width="80" />
+              <el-table-column prop="name" label="话题名称" width="150" />
+              <el-table-column prop="description" label="简介" show-overflow-tooltip />
+              <el-table-column prop="post_count" label="帖子数" width="90" />
+              <el-table-column prop="sort_order" label="排序" width="90" />
+              <el-table-column label="状态" width="110">
+                <template #default="scope">
+                  <el-tag :type="topicStatusType[scope.row.status] || 'info'">
+                    {{ topicStatusText[scope.row.status] || scope.row.status }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="审核" width="230">
+                <template #default="scope">
+                  <el-button size="small" plain type="success" @click="reviewTopic(scope.row, 'approved')">通过</el-button>
+                  <el-button size="small" plain type="info" @click="reviewTopic(scope.row, 'disabled')">停用</el-button>
+                  <el-button size="small" plain type="danger" @click="reviewTopic(scope.row, 'rejected')">拒绝</el-button>
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="170">
+                <template #default="scope">
+                  <el-button size="small" plain @click="openTopicDialog(scope.row)">编辑</el-button>
+                  <el-button size="small" plain type="danger" @click="deleteTopic(scope.row)">删除</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+        </div>
       </section>
     </main>
+
+    <el-dialog v-model="topicDialogVisible" :title="topicForm.topic_id ? '编辑话题' : '新增话题'" width="520px" align-center>
+      <el-form label-width="90px" class="topic-form">
+        <el-form-item label="话题名称">
+          <el-input v-model="topicForm.name" maxlength="20" show-word-limit placeholder="例如：学习交流" />
+        </el-form-item>
+        <el-form-item label="话题简介">
+          <el-input v-model="topicForm.description" type="textarea" maxlength="120" show-word-limit :rows="3" placeholder="简单说明这个话题适合发布什么内容" />
+        </el-form-item>
+        <el-form-item label="排序">
+          <el-input-number v-model="topicForm.sort_order" :min="1" :max="999" />
+        </el-form-item>
+        <el-form-item v-if="!topicForm.topic_id" label="初始状态">
+          <el-select v-model="topicForm.status">
+            <el-option label="已通过" value="approved" />
+            <el-option label="待审核" value="pending" />
+            <el-option label="已停用" value="disabled" />
+            <el-option label="已拒绝" value="rejected" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="topicDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="savingTopic" @click="saveTopic">保存话题</el-button>
+      </template>
+    </el-dialog>
 
     <el-dialog v-model="cropDialogVisible" title="裁剪管理员头像" width="500px" align-center destroy-on-close>
       <div style="height: 300px; width: 100%;">
@@ -709,6 +912,17 @@ onMounted(() => {
 .section-title span {
   color: #909399;
   font-size: 13px;
+}
+
+.topic-toolbar {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.topic-form {
+  padding-right: 10px;
 }
 
 .safe-text {

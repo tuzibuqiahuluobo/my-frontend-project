@@ -1,121 +1,62 @@
 # my-frontend-project
 
-> Languages: [中文](README.zh-CN.md) / English
+Small Vue 3 + Vite frontend for a Go backend. Focused on a community/post workflow with user accounts, Twemoji support, avatar cropping and a minimal admin area.
 
-A Vue 3 frontend for the Go backend. It currently includes login/register, email recovery flows, a welcome page, community posts, Twemoji reactions, post details, personal favorites, profile editing, avatar cropping, and a super-admin dashboard.
+Languages: [中文](README.zh-CN.md) / English
 
-## Key Facts
+Summary
+- Lightweight Vue 3 application using Vite, Element Plus and Vue Router. Built for local development and easy deployment behind an API server.
 
-- Framework: Vue 3 + Vite
-- UI library: Element Plus
-- Router: Vue Router
-- API wrapper: `src/api.js`
-- Avatar cropping: vue-cropper
-- Emoji rendering: `twemoji`
+Highlights
+- Pages: login/register, welcome, community feed, post detail, profile, dashboard, admin
+- Features: avatar cropping, emoji (Twemoji), favorites, comments, admin user management
+- Tech: Vue 3, Vite, Element Plus, vue-cropper, twemoji
 
-## Quick Start
+Quick start
 
-### Prerequisites
+Prerequisites
+- Node.js: ^20.19.0 or >=22.12.0
+- A running backend API (default: `http://localhost:8080`)
 
-- Node.js >= 20.19.0 or >= 22.12.0
-- Backend running at `http://localhost:8080`
-
-### Install
+Install
 
 ```bash
 npm install
 ```
 
-### Configure Backend URL
+Environment
+- Copy and edit environment file if you need to change the API base URL:
 
-By default, the frontend calls:
-
-```text
-http://localhost:8080
+```bash
+cp .env.example .env
+# then set VITE_API_BASE_URL=http://localhost:8080 (or your backend URL)
 ```
 
-If needed, copy `.env.example` to `.env` and change:
+Scripts
+- `npm run dev` — start dev server (Vite)
+- `npm run build` — build for production
+- `npm run preview` — locally preview production build
 
-```text
-VITE_API_BASE_URL=http://localhost:8080
-```
-
-### Run
+Run (development)
 
 ```bash
 npm run dev
 # open http://localhost:5173
 ```
 
-### Build
+Project structure (important files)
 
-```bash
-npm run build
-npm run preview
 ```
-
-## Current Routes
-
-| Path | Page | Access |
-|------|------|--------|
-| `/` | Redirects to `/login` | Public |
-| `/login` | Login / register | Public |
-| `/welcome` | Welcome page | Requires login |
-| `/main/community` | Community | Requires login |
-| `/main/community/post/:id` | Post detail | Requires login |
-| `/main/settings/profile` | Profile settings | Requires login |
-| `/main/dashboard` | Personal dashboard, creative space, and favorites | Requires login |
-| `/admin` | Super-admin dashboard | Requires login and `role = 2` |
-
-Compatibility note: the old `/main/profile` path redirects to `/main/settings/profile`.
-
-## Authentication Flow
-
-After login, the backend returns a `token`. The frontend stores the user payload in `localStorage` under the `user` key.
-
-`src/api.js` automatically sends:
-
-```text
-Authorization: Bearer <token>
-```
-
-This keeps page components simpler because they can call `apiRequest()` instead of manually handling the token.
-
-## Backend APIs Used
-
-| Method | Path | Purpose |
-|--------|------|---------|
-| `POST` | `/api/send-code` | Send registration verification code |
-| `POST` | `/api/recover-account` | Recover username by email verification code |
-| `POST` | `/api/reset-password` | Reset password by email verification code |
-| `POST` | `/api/register` | Register |
-| `POST` | `/api/login` | Login |
-| `POST` | `/api/update` | Update profile |
-| `GET` | `/api/posts` | List posts |
-| `GET` | `/api/post-detail?id=<id>` | Read one post with comments |
-| `POST` | `/api/create-post` | Create post |
-| `POST` | `/api/delete-post` | Delete post |
-| `POST` | `/api/create-comment` | Create comment |
-| `POST` | `/api/delete-comment` | Delete comment |
-| `POST` | `/api/toggle-favorite` | Favorite / unfavorite |
-| `GET` | `/api/my-favorites` | List current user's favorite posts |
-| `GET` | `/api/users` | Admin user list |
-| `POST` | `/api/delete-user` | Admin delete user |
-| `POST` | `/api/update-admin-profile` | Update super-admin username, password, avatar, or email |
-
-## Project Layout
-
-```text
-my-frontend/
-├─ public/
+.
+├─ public/                      # static assets
 ├─ src/
-│  ├─ assets/
-│  ├─ components/
-│  ├─ utils/
-│  ├─ views/
-│  ├─ api.js
+│  ├─ assets/                   # css, images
+│  ├─ components/               # reusable components
+│  ├─ utils/                    # helpers (imageTools, twemoji catalog...)
+│  ├─ views/                    # route views
+│  ├─ api.js                    # api wrapper / auth handling
 │  ├─ App.vue
-│  ├─ main.js
+│  ├─ main.js                   # app bootstrap (Element Plus, router)
 │  └─ router.js
 ├─ index.html
 ├─ vite.config.js
@@ -123,32 +64,27 @@ my-frontend/
 └─ .env.example
 ```
 
-## Development Notes
+Backend API (used endpoints)
+- Authentication: `/api/login`, `/api/register`
+- Account recovery: `/api/send-code`, `/api/recover-account`, `/api/reset-password`
+- Posts & comments: `/api/posts`, `/api/post-detail`, `/api/create-post`, `/api/create-comment`, `/api/delete-post`, `/api/delete-comment`
+- Favorites: `/api/toggle-favorite`, `/api/my-favorites`
+- Admin: `/api/users`, `/api/delete-user`, `/api/update-admin-profile`
 
-- The community post editor uses Twemoji for the emoji picker. The picker list is generated from Unicode ranges and filtered by `twemoji-parser`, then paginated in the UI.
-- If your terminal says `npm` cannot be found, Node/npm is not available in the current PATH.
-- The admin entry is hidden in the login page UI, but real permission is still enforced by the backend through `role = 2`.
+How auth works
+- After login the backend returns a token. The frontend stores user info (and token) in `localStorage.user`.
+- `src/api.js` attaches `Authorization: Bearer <token>` automatically to requests.
 
-## License
+Developer notes
+- Emoji list and picker are powered by Twemoji; emoji data is generated and filtered in `src/utils/twemojiCatalog.js`.
+- Admin entry is a hidden UI trigger; the backend enforces `role = 2` for admin operations.
 
-This is a learning project. No license file has been added yet.
+Contributing
+- This project is prepared as a learning/demo repo. Feel free to open issues or PRs for bugs and improvements.
 
-## AI Attribution
+License
+- No license file included. Use for learning purposes.
 
-Approximately 70% of this project was written with AI assistance.
+Credits
+- Built with assistance from AI (some code generated or suggested).
 
-## Production Deployment
-
-Before building for production, copy and edit the production environment template:
-
-```bash
-cp .env.production.example .env.production
-```
-
-Set `VITE_API_BASE_URL` to your HTTPS domain, for example:
-
-```text
-VITE_API_BASE_URL=https://example.com
-```
-
-The full Alibaba Cloud deployment guide is available in the backend repository at `deploy/README.zh-CN.md`.
