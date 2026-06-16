@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus' // 引入顶部消息提示插件
 // 【新增】引入我们用到的三个输入框前缀图标
@@ -13,6 +13,10 @@ const password = ref('')
 const confirmPassword = ref('')
 const loading = ref(false) // 增加一个加载状态，点击时按钮会转圈
 const focusedField = ref('')
+const LOGIN_LIMITS = {
+  usernameMax: 254,
+  passwordMax: 512
+}
 
 // 控制是否进入管理员模式
 const isAdminMode = ref(false)
@@ -49,6 +53,40 @@ const fieldRules = {
     '验证码有有效期，过期后需要重新获取'
   ]
 }
+
+const loginFieldRules = {
+  username: [
+    '请输入注册时使用的账号',
+    '登录时只检查账号是否存在，不再套用注册时的格式规则'
+  ],
+  password: [
+    '请输入账号对应的密码',
+    '登录时不重新限制密码格式，避免旧密码或管理员密码被前端拦截'
+  ]
+}
+
+const adminLoginFieldRules = {
+  username: [
+    '请输入后端 .env 中配置的 SUPER_ADMIN_USERNAME',
+    '超级管理员登录不套用普通用户注册规则'
+  ],
+  password: [
+    '请输入后端 .env 中配置的 SUPER_ADMIN_PASSWORD',
+    '如果修改了 .env，需要重启后端服务才会重新读取'
+  ]
+}
+
+const visibleUsernameRules = computed(() => {
+  // 新增：登录和注册的校验目的不同；注册要限制格式，登录只要把已有账号交给后端验证。
+  if (isAdminMode.value) return adminLoginFieldRules.username
+  return isLoginMode.value ? loginFieldRules.username : fieldRules.username
+})
+
+const visiblePasswordRules = computed(() => {
+  // 新增：管理员密码来自 .env，不能被普通用户的密码规则提前拦住。
+  if (isAdminMode.value) return adminLoginFieldRules.password
+  return isLoginMode.value ? loginFieldRules.password : fieldRules.password
+})
 
 const showRules = (field) => {
   // 只记录当前聚焦的输入框名称，模板根据它决定显示哪一组规则；点击空白处触发 blur 后会自动收起。
@@ -235,17 +273,17 @@ const submitForm = async () => {
     ElMessage.warning('账号和密码不能为空哦！')
     return
   }
-  const usernameMessage = validateUsernameInput(username.value)
-  if (usernameMessage) {
-    ElMessage.warning(usernameMessage)
-    return
-  }
-  const passwordMessage = validatePasswordInput(password.value)
-  if (passwordMessage) {
-    ElMessage.warning(passwordMessage)
-    return
-  }
   if (!isLoginMode.value && !isAdminMode.value) {
+    const usernameMessage = validateUsernameInput(username.value)
+    if (usernameMessage) {
+      ElMessage.warning(usernameMessage)
+      return
+    }
+    const passwordMessage = validatePasswordInput(password.value)
+    if (passwordMessage) {
+      ElMessage.warning(passwordMessage)
+      return
+    }
     if (!confirmPassword.value) {
       ElMessage.warning('请再输入一次密码')
       return
@@ -336,8 +374,8 @@ const submitForm = async () => {
         :placeholder="isAdminMode ? '请输入管理员账号' : '请输入用户名'" 
         clearable 
         size="large"
-        :maxlength="INPUT_LIMITS.usernameMax"
-        show-word-limit
+        :maxlength="isLoginMode ? LOGIN_LIMITS.usernameMax : INPUT_LIMITS.usernameMax"
+        :show-word-limit="!isLoginMode"
         class="auth-input"
         @focus="showRules('username')"
         @blur="hideRules"
@@ -346,7 +384,7 @@ const submitForm = async () => {
         <template #prefix><el-icon><User /></el-icon></template>
       </el-input>
       <div v-if="focusedField === 'username'" class="input-rules" :class="{ 'is-admin': isAdminMode }">
-        <p v-for="rule in fieldRules.username" :key="rule">{{ rule }}</p>
+        <p v-for="rule in visibleUsernameRules" :key="rule">{{ rule }}</p>
       </div>
       
       <el-input 
@@ -355,7 +393,7 @@ const submitForm = async () => {
         :placeholder="isAdminMode ? '请输入管理员密码' : '请输入密码'" 
         show-password 
         size="large"
-        :maxlength="INPUT_LIMITS.passwordMax"
+        :maxlength="isLoginMode ? LOGIN_LIMITS.passwordMax : INPUT_LIMITS.passwordMax"
         class="auth-input"
         @focus="showRules('password')"
         @blur="hideRules"
@@ -364,7 +402,7 @@ const submitForm = async () => {
         <template #prefix><el-icon><Lock /></el-icon></template>
       </el-input>
       <div v-if="focusedField === 'password'" class="input-rules" :class="{ 'is-admin': isAdminMode }">
-        <p v-for="rule in fieldRules.password" :key="rule">{{ rule }}</p>
+        <p v-for="rule in visiblePasswordRules" :key="rule">{{ rule }}</p>
       </div>
 
       <div v-if="!isLoginMode && !isAdminMode">
