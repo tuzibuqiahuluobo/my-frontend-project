@@ -6,6 +6,7 @@ import { ChatDotRound, Star, StarFilled, Delete, Picture, Edit } from '@element-
 import { apiRequest, getStoredUser, isAdmin } from '../api'
 import TwemojiIcon from '../components/TwemojiIcon.vue'
 import PostImageGrid from '../components/PostImageGrid.vue'
+import CommentComposer from '../components/CommentComposer.vue'
 import { IMAGE_ACCEPT, POST_MAX_IMAGES, compressPostImages } from '../utils/imageTools'
 import { buildTwemojiCatalog, findTwemojiByCodePoint } from '../utils/twemojiCatalog'
 
@@ -65,8 +66,8 @@ const hasComposerDraft = computed(() => {
   )
 })
 
-// 用于绑定每条帖子独立的评论输入框内容，键名是 postId，键值是输入的字符串
-const commentInputs = ref({})
+// 新增：记录每个帖子当前正在回复哪条评论，键名是 postId，值是被回复的评论对象。
+const replyTargets = ref({})
 
 const loadTopics = async () => {
   topicsLoading.value = true
@@ -315,26 +316,24 @@ const goToPostDetail = (postId) => {
   router.push(`/main/community/post/${postId}`)
 }
 
-// 发表评论逻辑
-const submitComment = async (postId) => {
-  const content = commentInputs.value[postId]?.trim()
-  if (!content) {
-    ElMessage.warning('评论内容不能为空哦')
-    return
-  }
+const startReplyComment = (postId, comment) => {
+  // 新增：只记录被回复评论的信息，真正提交时由 CommentComposer 传 parent_id 给后端。
+  replyTargets.value = { ...replyTargets.value, [postId]: comment }
+}
 
-  try {
-    const data = await apiRequest('/api/create-comment', {
-      method: 'POST',
-      body: JSON.stringify({
-        post_id: postId,
-        content: content
-      })
-    })
-    ElMessage.success(data.message)
-    commentInputs.value[postId] = '' // 清空输入框
-    loadPosts() // 刷新列表，带出最新评论
-  } catch (error) { ElMessage.error(error.message || '评论发送失败') }
+const cancelReplyComment = (postId) => {
+  const nextTargets = { ...replyTargets.value }
+  delete nextTargets[postId]
+  replyTargets.value = nextTargets
+}
+
+const onCommentCreated = async (postId) => {
+  cancelReplyComment(postId)
+  await loadPosts()
+}
+
+const getCommentImages = (comment) => {
+  return Array.isArray(comment.images) ? comment.images.filter(Boolean) : []
 }
 
 // 切换收藏状态逻辑
@@ -634,16 +633,13 @@ const formatDate = (timeString) => {
             <div v-show="post.showComments" class="comment-box">
               
               <div class="comment-input-area">
-                <el-input 
-                  v-model="commentInputs[post.id]" 
-                  placeholder="善语结善缘，恶言伤人心..." 
-                  size="small"
-                  @keyup.enter="submitComment(post.id)"
-                >
-                  <template #append>
-                    <el-button @click="submitComment(post.id)">发送</el-button>
-                  </template>
-                </el-input>
+                <CommentComposer
+                  :post-id="post.id"
+                  :parent-comment="replyTargets[post.id]"
+                  compact
+                  @created="onCommentCreated(post.id)"
+                  @cancel-reply="cancelReplyComment(post.id)"
+                />
               </div>
               
               <div v-if="post.comments && post.comments.length > 0" class="comment-list">
@@ -656,18 +652,27 @@ const formatDate = (timeString) => {
                         <span class="comment-time">{{ formatDate(comment.created_at) }}</span>
                       </div>
                       
-                      <el-button 
-                        v-if="comment.username === currentUser.username || isAdmin(currentUser)"
-                        type="danger" 
-                        link 
-                        :icon="Delete" 
-                        size="small"
-                        @click="deleteComment(comment.id)"
-                      >
-                        删除
-                      </el-button>
+                      <div class="comment-actions-inline">
+                        <el-button type="primary" link size="small" @click="startReplyComment(post.id, comment)">
+                          回复
+                        </el-button>
+                        <el-button
+                          v-if="comment.username === currentUser.username || isAdmin(currentUser)"
+                          type="danger"
+                          link
+                          :icon="Delete"
+                          size="small"
+                          @click="deleteComment(comment.id)"
+                        >
+                          删除
+                        </el-button>
+                      </div>
+                    </div>
+                    <div v-if="comment.reply_to_nickname || comment.reply_to_username" class="reply-hint">
+                      回复 @{{ comment.reply_to_nickname || comment.reply_to_username }}
                     </div>
                     <div class="comment-text">{{ comment.content }}</div>
+                    <PostImageGrid :images="getCommentImages(comment)" compact />
                   </div>
                 </div>
               </div>
@@ -1187,6 +1192,18 @@ const formatDate = (timeString) => {
   display: flex; 
   justify-content: space-between; 
   align-items: center; 
+}
+
+.comment-actions-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.reply-hint {
+  margin-top: 4px;
+  color: #0284c7;
+  font-size: 12px;
 }
 
 .comment-name { 

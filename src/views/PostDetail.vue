@@ -5,13 +5,14 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, ChatDotRound, Delete, Star, StarFilled } from '@element-plus/icons-vue'
 import { apiRequest, getStoredUser, isAdmin } from '../api'
 import PostImageGrid from '../components/PostImageGrid.vue'
+import CommentComposer from '../components/CommentComposer.vue'
 
 const route = useRoute()
 const router = useRouter()
 const post = ref(null)
 const loading = ref(true)
-const commentContent = ref('')
 const currentUser = ref({ uid: null, username: '', role: 0 })
+const replyTarget = ref(null)
 
 const formatDate = (timeString) => {
   // 详情页显示完整一点的时间，方便用户知道这条动态具体是什么时候发的。
@@ -31,6 +32,10 @@ const hasPostTitle = (targetPost) => {
 
 const getPostTags = (targetPost) => {
   return Array.isArray(targetPost?.tags) ? targetPost.tags.filter(Boolean) : []
+}
+
+const getCommentImages = (comment) => {
+  return Array.isArray(comment?.images) ? comment.images.filter(Boolean) : []
 }
 
 const shouldShowTopic = (targetPost) => {
@@ -79,24 +84,17 @@ const toggleFavorite = async () => {
   }
 }
 
-const submitComment = async () => {
-  const content = commentContent.value.trim()
-  if (!content) {
-    ElMessage.warning('评论内容不能为空哦')
-    return
-  }
+const onCommentCreated = async () => {
+  replyTarget.value = null
+  await loadPostDetail()
+}
 
-  try {
-    const data = await apiRequest('/api/create-comment', {
-      method: 'POST',
-      body: JSON.stringify({ post_id: post.value.id, content })
-    })
-    ElMessage.success(data.message)
-    commentContent.value = ''
-    loadPostDetail()
-  } catch (error) {
-    ElMessage.error(error.message || '评论发送失败')
-  }
+const startReply = (comment) => {
+  replyTarget.value = comment
+}
+
+const cancelReply = () => {
+  replyTarget.value = null
 }
 
 const deleteComment = (commentId) => {
@@ -173,15 +171,12 @@ onMounted(() => {
       </div>
 
       <div class="reply-box">
-        <el-input
-          v-model="commentContent"
-          type="textarea"
-          :autosize="{ minRows: 2, maxRows: 4 }"
-          placeholder="写下你的回复..."
+        <CommentComposer
+          :post-id="post.id"
+          :parent-comment="replyTarget"
+          @created="onCommentCreated"
+          @cancel-reply="cancelReply"
         />
-        <div class="reply-action">
-          <el-button type="primary" round color="#38bdf8" @click="submitComment">回复</el-button>
-        </div>
       </div>
 
       <div class="comment-list">
@@ -193,18 +188,27 @@ onMounted(() => {
                 <span class="comment-name">{{ comment.nickname || comment.username }}</span>
                 <span class="comment-time">{{ formatDate(comment.created_at) }}</span>
               </div>
-              <el-button
-                v-if="comment.username === currentUser.username || isAdmin(currentUser)"
-                type="danger"
-                link
-                :icon="Delete"
-                size="small"
-                @click="deleteComment(comment.id)"
-              >
-                删除
-              </el-button>
+              <div class="comment-actions-inline">
+                <el-button type="primary" link size="small" @click="startReply(comment)">
+                  回复
+                </el-button>
+                <el-button
+                  v-if="comment.username === currentUser.username || isAdmin(currentUser)"
+                  type="danger"
+                  link
+                  :icon="Delete"
+                  size="small"
+                  @click="deleteComment(comment.id)"
+                >
+                  删除
+                </el-button>
+              </div>
+            </div>
+            <div v-if="comment.reply_to_nickname || comment.reply_to_username" class="reply-hint">
+              回复 @{{ comment.reply_to_nickname || comment.reply_to_username }}
             </div>
             <div class="comment-text">{{ comment.content }}</div>
+            <PostImageGrid :images="getCommentImages(comment)" compact />
           </div>
         </div>
         <el-empty v-if="!post.comments || post.comments.length === 0" description="暂无评论，快来回复吧~" />
@@ -308,12 +312,6 @@ onMounted(() => {
   padding-top: 16px;
 }
 
-.reply-action {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 12px;
-}
-
 .comment-list {
   margin-top: 20px;
   display: flex;
@@ -329,6 +327,18 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.comment-actions-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.reply-hint {
+  margin-top: 5px;
+  color: #0284c7;
+  font-size: 12px;
 }
 
 .comment-text {
