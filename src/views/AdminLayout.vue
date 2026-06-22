@@ -71,6 +71,7 @@ const adminForm = ref({
   currentPassword: ''
 })
 const savingAdmin = ref(false)
+const savingAvatar = ref(false)
 const fileInputRef = ref(null)
 const cropDialogVisible = ref(false)
 const cropperRef = ref(null)
@@ -93,6 +94,23 @@ const loadCurrentAdmin = () => {
   }
   currentAdmin.value = user
   syncAdminForm(user)
+}
+
+const applyAdminPayload = (data) => {
+  // 后端保存成功后会返回最新管理员资料；这里统一同步到页面状态和 localStorage，
+  // 这样侧边栏头像、资料卡头像和下次刷新后的登录信息都会保持一致。
+  const nextAdmin = {
+    uid: data.uid,
+    username: data.username,
+    nickname: data.nickname,
+    avatar: data.avatar,
+    email: data.email,
+    role: data.role,
+    token: data.token
+  }
+  currentAdmin.value = nextAdmin
+  saveStoredUser(nextAdmin)
+  syncAdminForm(nextAdmin)
 }
 
 const fetchAllUsers = async () => {
@@ -249,24 +267,33 @@ const saveAdminProfile = async () => {
       })
     })
 
-    const nextAdmin = {
-      uid: data.uid,
-      username: data.username,
-      nickname: data.nickname,
-      avatar: data.avatar,
-      email: data.email,
-      role: data.role,
-      token: data.token
-    }
-    currentAdmin.value = nextAdmin
-    saveStoredUser(nextAdmin)
-    syncAdminForm(nextAdmin)
+    applyAdminPayload(data)
     ElMessage.success(data.message)
     fetchAllUsers()
   } catch (error) {
     ElMessage.error(error.message || '管理员资料保存失败')
   } finally {
     savingAdmin.value = false
+  }
+}
+
+const saveAdminAvatar = async (avatarData) => {
+  savingAvatar.value = true
+  try {
+    const data = await apiRequest('/api/update-admin-profile', {
+      method: 'POST',
+      // 这里只提交 avatar 一个字段，后端会识别为“只改头像”，不要求输入当前密码。
+      body: JSON.stringify({ avatar: avatarData })
+    })
+    applyAdminPayload(data)
+    ElMessage.success('头像已自动保存')
+    fetchAllUsers()
+  } catch (error) {
+    // 保存失败时把表单头像恢复成当前登录信息里的头像，避免页面显示“看似成功”的临时图片。
+    adminForm.value.avatar = currentAdmin.value.avatar || ''
+    ElMessage.error(error.message || '头像保存失败，请重新选择')
+  } finally {
+    savingAvatar.value = false
   }
 }
 
@@ -281,13 +308,13 @@ const onAvatarSelected = async (event) => {
   try {
     assertImageFile(file, AVATAR_MAX_BYTES, '头像')
     if (isGifFile(file)) {
-      // GIF 动图进入裁剪器会丢失动画，所以管理员头像也直接保存原始动图。
+      // GIF 动图进入裁剪器会丢失动画，所以这里直接保存原图，保证动图头像还能动。
       adminForm.value.avatar = await readFileAsDataUrl(file)
-      ElMessage.success('GIF 头像已选择，保存资料后生效')
+      await saveAdminAvatar(adminForm.value.avatar)
       return
     }
 
-    // FileReader 会把本地图片转成浏览器可预览的 base64，裁剪器需要这个格式来显示图片。
+    // 普通图片先转成 base64 给裁剪器预览，确认裁剪后再自动保存到后端。
     rawImageUrl.value = await readFileAsDataUrl(file)
     cropDialogVisible.value = true
   } catch (error) {
@@ -299,9 +326,10 @@ const onAvatarSelected = async (event) => {
 
 const confirmAvatarCrop = () => {
   if (!cropperRef.value) return
-  cropperRef.value.getCropData((data) => {
+  cropperRef.value.getCropData(async (data) => {
     adminForm.value.avatar = data
     cropDialogVisible.value = false
+    await saveAdminAvatar(data)
   })
 }
 
@@ -464,7 +492,7 @@ onMounted(() => {
         <div v-if="activeTab === 'profile'" class="panel profile-panel">
           <div class="profile-preview">
             <el-tooltip content="点击更换头像" placement="top">
-              <div class="avatar-edit-trigger" @click="triggerAvatarUpload">
+              <div class="avatar-edit-trigger" :class="{ 'is-saving': savingAvatar }" @click="!savingAvatar && triggerAvatarUpload()">
                 <el-avatar :size="88" :src="adminForm.avatar" />
                 <span>更换头像</span>
               </div>

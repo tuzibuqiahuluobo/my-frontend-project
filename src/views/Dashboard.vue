@@ -1,60 +1,82 @@
 <script setup>
-import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { MagicStick, Setting, StarFilled } from '@element-plus/icons-vue'
 import { apiRequest, clearStoredUser, getStoredUser, saveStoredUser } from '../api'
 import PostImageGrid from '../components/PostImageGrid.vue'
+import { personalBackgroundStyle } from '../utils/personalStyle'
 
+const route = useRoute()
 const router = useRouter()
 const currentUser = ref({ uid: null, username: '', nickname: '', signature: '', avatar: '' })
-// 收藏列表单独放在个人中心里，避免和社区广场的帖子列表互相影响。
+const profileUser = ref({ uid: null, username: '', nickname: '', signature: '', avatar: '' })
+const userPosts = ref([])
 const favoritePosts = ref([])
-// 加载状态用于显示骨架屏，让用户知道“我的收藏”正在读取数据。
+const profileLoading = ref(false)
+const postsLoading = ref(false)
 const favoritesLoading = ref(false)
 
-onMounted(() => {
+const viewedUid = computed(() => Number(route.params.uid || currentUser.value.uid || 0))
+const isSelfProfile = computed(() => Number(profileUser.value.uid) === Number(currentUser.value.uid))
+const pageTitle = computed(() => (isSelfProfile.value ? '个人中心' : `${profileUser.value.nickname || profileUser.value.username || '用户'}的主页`))
+const pageStyle = computed(() => personalBackgroundStyle(profileUser.value))
+
+const loadStoredUser = () => {
   const user = getStoredUser()
   if (!user) {
     router.push('/login')
-  } else {
-    currentUser.value = user
-    refreshCurrentUser()
-    loadFavoritePosts()
+    return false
   }
-})
+  currentUser.value = user
+  return true
+}
 
 const refreshCurrentUser = async () => {
   try {
     const freshUser = await apiRequest('/api/me')
-    // 后端返回的是最新资料，token 仍然沿用本地保存的 token，避免刷新后丢登录态。
+    // token 只存在本地登录信息里，后端 /api/me 不需要重复返回 token。
     currentUser.value = { ...currentUser.value, ...freshUser, token: currentUser.value.token }
     saveStoredUser(currentUser.value)
   } catch (error) {
-    // 刷新资料失败时不影响页面打开，下面收藏列表会继续用原来的登录态请求。
     console.warn('刷新当前用户资料失败', error)
   }
 }
 
-const logout = () => {
-  clearStoredUser()
-  ElMessage.info('已安全退出')
-  router.push('/login')
+const loadProfileUser = async () => {
+  if (!viewedUid.value) return
+  profileLoading.value = true
+  try {
+    if (Number(viewedUid.value) === Number(currentUser.value.uid)) {
+      await refreshCurrentUser()
+      profileUser.value = { ...currentUser.value }
+    } else {
+      profileUser.value = await apiRequest(`/api/user-profile?uid=${viewedUid.value}`)
+    }
+  } catch (error) {
+    ElMessage.error(error.message || '用户主页读取失败')
+  } finally {
+    profileLoading.value = false
+  }
 }
 
-// 跳转到刚刚新建的资料设置页
-const goToProfile = () => {
-  router.push('/main/settings/profile')
-}
-
-const goToDressUp = () => {
-  ElMessage.info('个性装扮功能还在准备中')
+const loadUserPosts = async () => {
+  if (!viewedUid.value) return
+  postsLoading.value = true
+  try {
+    // “我的帖子”按 uid 读取，别人主页也能复用这一套列表。
+    userPosts.value = await apiRequest(`/api/user-posts?uid=${viewedUid.value}`)
+  } catch (error) {
+    ElMessage.error(error.message || '帖子列表读取失败')
+  } finally {
+    postsLoading.value = false
+  }
 }
 
 const loadFavoritePosts = async () => {
+  if (!isSelfProfile.value) return
   favoritesLoading.value = true
   try {
-    // 后端会根据当前登录 token 找到“我的收藏”，前端不需要自己传 uid，安全性更好。
     favoritePosts.value = await apiRequest('/api/my-favorites')
   } catch (error) {
     ElMessage.error(error.message || '收藏列表读取失败')
@@ -63,13 +85,38 @@ const loadFavoritePosts = async () => {
   }
 }
 
+const loadPageData = async () => {
+  if (!loadStoredUser()) return
+  await loadProfileUser()
+  await loadUserPosts()
+  await loadFavoritePosts()
+}
+
+const logout = () => {
+  clearStoredUser()
+  ElMessage.info('已安全退出')
+  router.push('/login')
+}
+
+const goToProfile = () => {
+  router.push('/main/settings/profile')
+}
+
+const goToDressUp = () => {
+  router.push('/main/settings/profile?tab=style')
+}
+
+const goToUserProfile = (uid) => {
+  if (!uid) return
+  router.push(Number(uid) === Number(currentUser.value.uid) ? '/main/dashboard' : `/main/user/${uid}`)
+}
+
 const toggleFavorite = async (post) => {
   try {
     await apiRequest('/api/toggle-favorite', {
       method: 'POST',
       body: JSON.stringify({ post_id: post.id })
     })
-    // 在个人中心点“取消收藏”后，直接从当前列表移除，页面反馈会更及时。
     favoritePosts.value = favoritePosts.value.filter(item => item.id !== post.id)
     ElMessage.success('已取消收藏')
   } catch (error) {
@@ -78,61 +125,52 @@ const toggleFavorite = async (post) => {
 }
 
 const formatDate = (timeString) => {
-  // 后端返回的是标准时间字符串，这里转换成更短的月日时间，收藏卡片会更清爽。
   const date = new Date(timeString)
   return `${date.getMonth() + 1}月${date.getDate()}日 ${date.getHours()}:${String(date.getMinutes()).padStart(2, '0')}`
 }
 
 const goToPostDetail = (postId) => {
-  // 从“我的收藏”进入帖子详情，路由里带 id，详情页就能单独读取这条帖子。
   router.push(`/main/community/post/${postId}`)
 }
 
 const postImages = (post) => {
-  // 收藏卡片也兼容旧单图数据，避免旧帖子没有 images 字段时不显示图片。
   if (Array.isArray(post.images) && post.images.length > 0) return post.images
   return post.image ? [post.image] : []
 }
 
-const hasPostTitle = (post) => {
-  return String(post.title || '').trim() !== ''
-}
-
-const getPostTags = (post) => {
-  return Array.isArray(post.tags) ? post.tags.filter(Boolean) : []
-}
-
-const shouldShowTopic = (post) => {
-  return post.topic_name && post.topic_name !== '综合社区'
-}
+const hasPostTitle = (post) => String(post.title || '').trim() !== ''
+const getPostTags = (post) => Array.isArray(post.tags) ? post.tags.filter(Boolean) : []
+const shouldShowTopic = (post) => post.topic_name && post.topic_name !== '综合社区'
 
 const postPreview = (content, hasImage = false) => {
-  // 收藏区只做简洁预览，内容太长时截断，真正阅读全文交给详情页。
   const text = String(content || '').trim()
   if (!text && hasImage) return '图片动态'
-  return text.length > 80 ? `${text.slice(0, 80)}...` : text
+  return text.length > 100 ? `${text.slice(0, 100)}...` : text
 }
+
+onMounted(loadPageData)
+
+watch(() => route.params.uid, loadPageData)
 </script>
 
 <template>
-  <div class="dashboard-page">
+  <div class="dashboard-page personalized-page" :style="pageStyle">
     <div class="dashboard-inner">
-      
       <div class="dashboard-header">
-        <h1 class="page-title">个人中心</h1>
-        <el-button type="danger" plain @click="logout">退出登录</el-button>
+        <h1 class="page-title">{{ pageTitle }}</h1>
+        <el-button v-if="isSelfProfile" type="danger" plain @click="logout">退出登录</el-button>
       </div>
 
-      <el-card shadow="never" class="profile-card">
+      <el-card shadow="never" class="profile-card" v-loading="profileLoading">
         <div class="profile-row">
-          <el-avatar :src="currentUser.avatar" :size="80" class="profile-avatar" />
+          <el-avatar :src="profileUser.avatar" :size="84" class="profile-avatar" />
           <div class="profile-info">
-            <h2 class="profile-name">{{ currentUser.nickname || currentUser.username }}</h2>
-            <p class="profile-signature">{{ currentUser.signature || '这个人还没有写个性签名' }}</p>
-            <p class="profile-uid">UID: {{ String(currentUser.uid).padStart(5, '0') }}</p>
-            <div>
+            <h2 class="profile-name">{{ profileUser.nickname || profileUser.username }}</h2>
+            <p class="profile-signature">{{ profileUser.signature || '这个人还没有写个性签名' }}</p>
+            <p class="profile-uid">UID: {{ String(profileUser.uid || '').padStart(5, '0') }} · 帖子 {{ profileUser.post_count || userPosts.length }}</p>
+            <div v-if="isSelfProfile" class="profile-actions">
               <el-button size="small" round type="primary" plain @click="goToProfile">
-                <el-icon style="margin-right: 5px;"><Setting /></el-icon> 
+                <el-icon style="margin-right: 5px;"><Setting /></el-icon>
                 编辑个人资料
               </el-button>
               <el-button size="small" round type="warning" plain @click="goToDressUp">
@@ -144,52 +182,73 @@ const postPreview = (content, hasImage = false) => {
         </div>
       </el-card>
 
-      <h3 class="section-title">🛠️ 我的创意空间</h3>
-      <el-empty description="暂无作品喵~" />
+      <h3 class="section-title">我的帖子</h3>
+      <el-skeleton v-if="postsLoading" :rows="4" animated />
+      <el-empty v-else-if="userPosts.length === 0" description="暂无帖子喵~" />
+      <div v-else class="post-grid">
+        <el-card v-for="post in userPosts" :key="post.id" shadow="hover" class="mini-post-card" @click="goToPostDetail(post.id)">
+          <h4 v-if="hasPostTitle(post)" class="mini-post-title">{{ post.title }}</h4>
+          <div v-if="shouldShowTopic(post) || getPostTags(post).length" class="pill-row">
+            <el-tag v-if="shouldShowTopic(post)" class="topic-tag" size="small" effect="plain">{{ post.topic_name }}</el-tag>
+            <span v-for="tag in getPostTags(post)" :key="tag" class="tag-pill">#{{ tag }}</span>
+          </div>
+          <PostImageGrid :images="postImages(post)" compact />
+          <p class="mini-post-preview">{{ postPreview(post.content, postImages(post).length > 0) }}</p>
+          <div class="mini-post-meta">
+            <span>{{ formatDate(post.created_at) }}</span>
+            <span>评论 {{ post.comments ? post.comments.length : 0 }} · 收藏 {{ post.favorite_count }}</span>
+          </div>
+        </el-card>
+      </div>
 
-      <h3 class="section-title favorite-title">⭐ 我的收藏</h3>
-      <el-skeleton v-if="favoritesLoading" :rows="4" animated />
-      <el-empty v-else-if="favoritePosts.length === 0" description="还没有收藏任何帖子喵~" />
-      <el-row v-else :gutter="20">
-        <el-col v-for="post in favoritePosts" :key="post.id" :xs="24" :sm="12" style="margin-bottom: 20px;">
-          <el-card shadow="hover" class="favorite-card" @click="goToPostDetail(post.id)">
-            <div style="display: flex; align-items: center; margin-bottom: 12px;">
-              <el-avatar :size="34" :src="post.avatar" />
-              <div style="margin-left: 10px;">
-                <div class="favorite-author">{{ post.nickname || post.username }}</div>
-                <div class="favorite-time">{{ formatDate(post.created_at) }}</div>
+      <template v-if="isSelfProfile">
+        <h3 class="section-title favorite-title">我的收藏</h3>
+        <el-skeleton v-if="favoritesLoading" :rows="4" animated />
+        <el-empty v-else-if="favoritePosts.length === 0" description="还没有收藏任何帖子喵~" />
+        <el-row v-else :gutter="20">
+          <el-col v-for="post in favoritePosts" :key="post.id" :xs="24" :sm="12" style="margin-bottom: 20px;">
+            <el-card shadow="hover" class="favorite-card" @click="goToPostDetail(post.id)">
+              <div class="favorite-author-row">
+                <el-avatar :size="34" :src="post.avatar" class="clickable-user" @click.stop="goToUserProfile(post.author_uid)" />
+                <div style="margin-left: 10px;">
+                  <div class="favorite-author clickable-user" @click.stop="goToUserProfile(post.author_uid)">{{ post.nickname || post.username }}</div>
+                  <div class="favorite-time">{{ formatDate(post.created_at) }}</div>
+                </div>
               </div>
-            </div>
-            <h4 v-if="hasPostTitle(post)" class="favorite-post-title">{{ post.title }}</h4>
-            <div v-if="shouldShowTopic(post) || getPostTags(post).length" class="favorite-pill-row">
-              <el-tag v-if="shouldShowTopic(post)" class="favorite-topic-tag" size="small" effect="plain">{{ post.topic_name }}</el-tag>
-              <span v-for="tag in getPostTags(post)" :key="tag" class="favorite-tag-pill">#{{ tag }}</span>
-            </div>
-            <PostImageGrid :images="postImages(post)" compact />
-            <p class="favorite-preview">{{ postPreview(post.content, postImages(post).length > 0) }}</p>
-            <div class="favorite-meta">
-              <span>评论 {{ post.comments ? post.comments.length : 0 }} · 收藏 {{ post.favorite_count }}</span>
-              <el-button type="warning" plain size="small" :icon="StarFilled" @click.stop="toggleFavorite(post)">
-                取消收藏
-              </el-button>
-            </div>
-          </el-card>
-        </el-col>
-      </el-row>
-
+              <h4 v-if="hasPostTitle(post)" class="favorite-post-title">{{ post.title }}</h4>
+              <div v-if="shouldShowTopic(post) || getPostTags(post).length" class="pill-row">
+                <el-tag v-if="shouldShowTopic(post)" class="topic-tag" size="small" effect="plain">{{ post.topic_name }}</el-tag>
+                <span v-for="tag in getPostTags(post)" :key="tag" class="tag-pill">#{{ tag }}</span>
+              </div>
+              <PostImageGrid :images="postImages(post)" compact />
+              <p class="favorite-preview">{{ postPreview(post.content, postImages(post).length > 0) }}</p>
+              <div class="favorite-meta">
+                <span>评论 {{ post.comments ? post.comments.length : 0 }} · 收藏 {{ post.favorite_count }}</span>
+                <el-button type="warning" plain size="small" :icon="StarFilled" @click.stop="toggleFavorite(post)">
+                  取消收藏
+                </el-button>
+              </div>
+            </el-card>
+          </el-col>
+        </el-row>
+      </template>
     </div>
   </div>
 </template>
 
 <style scoped>
 .dashboard-page {
-  background-color: #f0f2f5;
   min-height: 100vh;
   padding: 40px 20px;
+  background-color: #f0f2f5;
+  background-image: linear-gradient(rgba(240, 242, 245, var(--sunshine-bg-opacity)), rgba(240, 242, 245, var(--sunshine-bg-opacity))), var(--sunshine-page-bg);
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
 }
 
 .dashboard-inner {
-  max-width: 900px;
+  max-width: 920px;
   margin: 0 auto;
 }
 
@@ -197,7 +256,7 @@ const postPreview = (content, hasImage = false) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 30px;
+  margin-bottom: 24px;
 }
 
 .page-title,
@@ -212,19 +271,25 @@ const postPreview = (content, hasImage = false) => {
   margin: 0;
 }
 
-.profile-card {
+.profile-card,
+.favorite-card,
+.mini-post-card {
   border-radius: 12px;
+}
+
+.profile-card {
   margin-bottom: 30px;
 }
 
-.profile-row {
+.profile-row,
+.favorite-author-row {
   display: flex;
   align-items: center;
 }
 
 .profile-avatar {
-  border: 2px solid #eee;
-  margin-right: 30px;
+  border: 3px solid rgba(255, 255, 255, 0.9);
+  margin-right: 28px;
 }
 
 .profile-info {
@@ -238,7 +303,8 @@ const postPreview = (content, hasImage = false) => {
 .profile-uid,
 .profile-signature,
 .favorite-time,
-.favorite-meta {
+.favorite-meta,
+.mini-post-meta {
   color: #909399;
   font-size: 12px;
 }
@@ -253,24 +319,29 @@ const postPreview = (content, hasImage = false) => {
   font-size: 13px;
 }
 
+.profile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .section-title {
-  margin-bottom: 20px;
+  margin: 28px 0 18px;
 }
 
-.favorite-title {
-  margin: 30px 0 20px;
+.post-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
 }
 
+.mini-post-card,
 .favorite-card {
-  border-radius: 12px;
   height: 100%;
   cursor: pointer;
 }
 
-.favorite-author {
-  font-weight: bold;
-}
-
+.mini-post-title,
 .favorite-post-title {
   margin: 0 0 10px;
   color: #303133;
@@ -278,14 +349,14 @@ const postPreview = (content, hasImage = false) => {
   line-height: 1.4;
 }
 
-.favorite-pill-row {
+.pill-row {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   margin-bottom: 8px;
 }
 
-.favorite-tag-pill {
+.tag-pill {
   border-radius: 999px;
   padding: 5px 8px;
   background: #f8fafc;
@@ -295,17 +366,49 @@ const postPreview = (content, hasImage = false) => {
   line-height: 1;
 }
 
+.topic-tag {
+  border-radius: 999px;
+}
+
+.mini-post-preview,
 .favorite-preview {
   color: #606266;
   font-size: 14px;
   line-height: 1.7;
   margin-bottom: 12px;
+  white-space: pre-wrap;
 }
 
+.mini-post-meta,
 .favorite-meta {
   display: flex;
   justify-content: space-between;
+  gap: 12px;
   align-items: center;
 }
 
+.clickable-user {
+  cursor: pointer;
+}
+
+.clickable-user:hover {
+  color: var(--sunshine-theme-start);
+}
+
+:deep(.el-button--primary) {
+  --el-button-bg-color: var(--sunshine-theme-start);
+  --el-button-border-color: var(--sunshine-theme-start);
+  --el-button-hover-bg-color: var(--sunshine-theme-end);
+  --el-button-hover-border-color: var(--sunshine-theme-end);
+}
+
+@media (max-width: 720px) {
+  .profile-row {
+    align-items: flex-start;
+  }
+
+  .post-grid {
+    grid-template-columns: 1fr;
+  }
+}
 </style>

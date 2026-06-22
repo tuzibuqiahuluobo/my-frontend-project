@@ -2,14 +2,17 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { getStoredUser } from '../api'
+import { personalBackgroundStyle } from '../utils/personalStyle'
 
 const router = useRouter()
 const username = ref('SunShine')
+const currentUser = ref({})
 
 onMounted(() => {
   // 从本地记忆里读取用户名，用来打招呼
   const userObj = getStoredUser()
   if (userObj) {
+    currentUser.value = userObj
     // 【修改】优先显示昵称，如果老账号没昵称就降级显示用户名
     username.value = userObj.nickname || userObj.username
   }
@@ -22,7 +25,7 @@ const enterSystem = () => {
 </script>
 
 <template>
-  <div class="welcome-container" @click="enterSystem">
+  <div class="welcome-container personalized-page" :style="personalBackgroundStyle(currentUser)" @click="enterSystem">
     
     <div class="content">
       <h1 class="title">SunShine</h1>
@@ -40,7 +43,10 @@ const enterSystem = () => {
 .welcome-container {
   width: 100vw;
   height: 100vh;
-  background: #0f172a; /* 背景 */
+  background-color: #0f172a; /* 背景 */
+  background-image: linear-gradient(rgba(15, 23, 42, var(--sunshine-bg-opacity)), rgba(15, 23, 42, var(--sunshine-bg-opacity))), var(--sunshine-page-bg);
+  background-size: cover;
+  background-position: center;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -59,7 +65,7 @@ const enterSystem = () => {
   letter-spacing: 8px;
   margin: 0;
   /* 渐变文字特效 */
-  background: linear-gradient(to right, #38bdf8, #818cf8);
+  background: linear-gradient(to right, var(--sunshine-theme-start, #38bdf8), var(--sunshine-theme-end, #818cf8));
   -webkit-background-clip: text; 
   background-clip: text;         /* 【新增】标准属性，用来消除警告并兼容其他浏览器 */
   color: transparent;
@@ -78,7 +84,7 @@ const enterSystem = () => {
 
 .blink-text {
   font-size: 1rem;
-  color: #38bdf8;
+  color: var(--sunshine-theme-start, #38bdf8);
   letter-spacing: 3px;
   opacity: 0;
   animation: blink 2.5s infinite, fadeIn 1s ease-out 1s forwards; /* 叠加呼吸灯和延迟淡入动画 */
@@ -90,7 +96,7 @@ const enterSystem = () => {
   left: 0;
   width: 100%;
   height: 4px;
-  background: linear-gradient(to right, transparent, #38bdf8, transparent);
+  background: linear-gradient(to right, transparent, var(--sunshine-theme-start, #38bdf8), var(--sunshine-theme-end, #818cf8), transparent);
   opacity: 0.5;
 }
 

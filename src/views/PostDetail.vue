@@ -51,6 +51,12 @@ const backToCommunity = () => {
   router.back()
 }
 
+const goToUserProfile = (uid) => {
+  // 使用后端返回的 author_uid 跳转，避免用户改昵称或账号后链接失效。
+  if (!uid) return
+  router.push(Number(uid) === Number(currentUser.value.uid) ? '/main/dashboard' : `/main/user/${uid}`)
+}
+
 const loadPostDetail = async () => {
   loading.value = true
   try {
@@ -135,9 +141,9 @@ onMounted(() => {
 
     <el-card v-else-if="post" class="detail-card" shadow="never">
       <div class="post-header">
-        <el-avatar :size="46" :src="post.avatar" />
+        <el-avatar :size="46" :src="post.avatar" class="clickable-user" @click.stop="goToUserProfile(post.author_uid)" />
         <div class="user-info">
-          <span class="username">{{ post.nickname || post.username }}</span>
+          <span class="username clickable-user" @click.stop="goToUserProfile(post.author_uid)">{{ post.nickname || post.username }}</span>
           <span v-if="post.signature" class="signature">{{ post.signature }}</span>
           <span class="time">{{ formatDate(post.created_at) }}</span>
         </div>
@@ -181,11 +187,11 @@ onMounted(() => {
 
       <div class="comment-list">
         <div v-for="comment in post.comments" :key="comment.id" class="comment-item">
-          <el-avatar :size="34" :src="comment.avatar" />
+          <el-avatar :size="34" :src="comment.avatar" class="clickable-user" @click.stop="goToUserProfile(comment.author_uid)" />
           <div class="comment-body">
             <div class="comment-user">
               <div>
-                <span class="comment-name">{{ comment.nickname || comment.username }}</span>
+                <span class="comment-name clickable-user" @click.stop="goToUserProfile(comment.author_uid)">{{ comment.nickname || comment.username }}</span>
                 <span class="comment-time">{{ formatDate(comment.created_at) }}</span>
               </div>
               <div class="comment-actions-inline">
@@ -247,6 +253,14 @@ onMounted(() => {
 .comment-name {
   font-weight: bold;
   color: #303133;
+}
+
+.clickable-user {
+  cursor: pointer;
+}
+
+.clickable-user:hover {
+  color: #38bdf8;
 }
 
 .time,

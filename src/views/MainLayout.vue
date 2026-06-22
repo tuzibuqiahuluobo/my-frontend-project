@@ -3,6 +3,7 @@ import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { clearStoredUser, getStoredUser } from '../api'
 import DynamicMenuItem from '../components/DynamicMenuItem.vue'
+import { personalBackgroundStyle } from '../utils/personalStyle'
 
 const router = useRouter()
 const route = useRoute() // 用来获取当前页面在哪个路由，让菜单高亮对应项
@@ -13,6 +14,7 @@ const isCollapse = ref(true)
 const isDarkMode = ref(false)
 
 const currentUser = ref({ username: '', avatar: '' })
+const layoutStyle = computed(() => personalBackgroundStyle(currentUser.value))
 
 const applyBodyThemeClass = () => {
   // Element Plus 的弹窗、下拉框会挂到 body 下，把夜间状态同步过去才能统一变暗。
@@ -61,11 +63,18 @@ onMounted(() => {
   // 主题偏好存在 localStorage 里，刷新页面后也能记住白天/夜间模式。
   isDarkMode.value = localStorage.getItem('theme-mode') === 'dark'
   applyBodyThemeClass()
+  window.addEventListener('sunshine-user-updated', handleUserUpdated)
 })
 
 onUnmounted(() => {
   document.body.classList.remove('sunshine-dark')
+  window.removeEventListener('sunshine-user-updated', handleUserUpdated)
 })
+
+const handleUserUpdated = (event) => {
+  // 个人设置页保存后会发出这个事件，主布局收到后更新头像、昵称、背景和主题色。
+  currentUser.value = event.detail || getStoredUser() || currentUser.value
+}
 
 // 下拉菜单的点击事件监听（点击个人中心或退出登录）
 const handleCommand = (command) => {
@@ -91,7 +100,7 @@ watch(isDarkMode, applyBodyThemeClass)
 </script>
 
 <template>
-    <el-container class="main-layout" :class="{ 'dark-mode': isDarkMode }">
+    <el-container class="main-layout" :class="{ 'dark-mode': isDarkMode }" :style="layoutStyle">
       
       <el-aside 
         :width="isCollapse ? '64px' : '200px'" 
@@ -162,6 +171,9 @@ watch(isDarkMode, applyBodyThemeClass)
   height: 100vh;
   width: 100vw;
   background-color: #f0f2f5;
+  background-image: linear-gradient(rgba(240, 242, 245, var(--sunshine-bg-opacity)), rgba(240, 242, 245, var(--sunshine-bg-opacity))), var(--sunshine-page-bg);
+  background-size: cover;
+  background-position: center;
 }
 
 .main-layout.dark-mode {
@@ -193,7 +205,7 @@ watch(isDarkMode, applyBodyThemeClass)
   align-items: center;
   font-size: 16px;
   font-weight: bold;
-  color: #409EFF;
+  color: var(--sunshine-theme-start, #409EFF);
   border-bottom: 1px solid #f0f2f5;
   letter-spacing: 1px;
 }
@@ -206,7 +218,7 @@ watch(isDarkMode, applyBodyThemeClass)
 /* 顶部栏样式：利用 flex 布局让标题和头像各占两头 */
 .top-header {
   background-color: #ffffff;
-  border-bottom: 1px solid #e6e6e6;
+  border-bottom: 2px solid color-mix(in srgb, var(--sunshine-theme-start, #409EFF) 30%, #e6e6e6);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -246,7 +258,7 @@ watch(isDarkMode, applyBodyThemeClass)
 
 .page-content {
   padding: 20px;
-  background-color: #f5f7fa;
+  background-color: rgba(245, 247, 250, 0.82);
 }
 
 .dark-mode .page-content {
@@ -274,7 +286,16 @@ watch(isDarkMode, applyBodyThemeClass)
 }
 
 .dark-mode :deep(.el-menu-item.is-active) {
-  color: #93c5fd;
+  color: var(--sunshine-theme-start, #93c5fd);
   background-color: #111827;
+}
+
+:deep(.el-menu-item.is-active) {
+  color: var(--sunshine-theme-start, #409EFF);
+}
+
+:deep(.el-menu-item:hover),
+:deep(.el-sub-menu__title:hover) {
+  color: var(--sunshine-theme-start, #409EFF);
 }
 </style>

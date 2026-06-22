@@ -316,6 +316,12 @@ const goToPostDetail = (postId) => {
   router.push(`/main/community/post/${postId}`)
 }
 
+const goToUserProfile = (uid) => {
+  // 后端会给帖子和评论补 author_uid，点击头像或昵称时用 uid 跳转更稳定。
+  if (!uid) return
+  router.push(Number(uid) === Number(currentUser.value.uid) ? '/main/dashboard' : `/main/user/${uid}`)
+}
+
 const startReplyComment = (postId, comment) => {
   // 新增：只记录被回复评论的信息，真正提交时由 CommentComposer 传 parent_id 给后端。
   replyTargets.value = { ...replyTargets.value, [postId]: comment }
@@ -572,9 +578,9 @@ const formatDate = (timeString) => {
       >
         
         <div class="post-header">
-          <el-avatar :size="40" :src="post.avatar" />
+          <el-avatar :size="40" :src="post.avatar" class="clickable-user" @click.stop="goToUserProfile(post.author_uid)" />
           <div class="user-info">
-            <span class="username">{{ post.nickname || post.username }}</span>
+            <span class="username clickable-user" @click.stop="goToUserProfile(post.author_uid)">{{ post.nickname || post.username }}</span>
             <span v-if="post.signature" class="signature">{{ post.signature }}</span>
             <span class="time">{{ formatDate(post.created_at) }}</span>
           </div>
@@ -644,11 +650,11 @@ const formatDate = (timeString) => {
               
               <div v-if="post.comments && post.comments.length > 0" class="comment-list">
                 <div v-for="comment in post.comments" :key="comment.id" class="comment-item">
-                  <el-avatar :size="28" :src="comment.avatar" />
+                  <el-avatar :size="28" :src="comment.avatar" class="clickable-user" @click.stop="goToUserProfile(comment.author_uid)" />
                   <div class="comment-body">
                     <div class="comment-user">
                       <div style="display: flex; gap: 10px; align-items: baseline;">
-                        <span class="comment-name">{{ comment.nickname || comment.username }}</span>
+                        <span class="comment-name clickable-user" @click.stop="goToUserProfile(comment.author_uid)">{{ comment.nickname || comment.username }}</span>
                         <span class="comment-time">{{ formatDate(comment.created_at) }}</span>
                       </div>
                       
@@ -1033,6 +1039,14 @@ const formatDate = (timeString) => {
   font-size: 15px;
   font-weight: bold;
   color: #303133;
+}
+
+.clickable-user {
+  cursor: pointer;
+}
+
+.clickable-user:hover {
+  color: #38bdf8;
 }
 
 .time {

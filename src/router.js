@@ -59,6 +59,13 @@ const routes = [
                 }
             },
             {
+                path: 'user/:uid',
+                component: Dashboard,
+                meta: {
+                    title: '用户主页'
+                }
+            },
+            {
                 path: 'games',
                 component: GameCenter,
                 meta: {
