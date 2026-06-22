@@ -330,6 +330,11 @@ const submitForm = async () => {
         nickname: data.nickname,
         signature: data.signature,
         avatar: data.avatar,
+        profile_background: data.profile_background,
+        welcome_background: data.welcome_background,
+        theme_color_start: data.theme_color_start,
+        theme_color_end: data.theme_color_end,
+        theme_opacity: data.theme_opacity,
         role: data.role,
         token: data.token
       })
