@@ -240,16 +240,40 @@ watch(() => route.params.uid, loadPageData)
 .dashboard-page {
   min-height: 100vh;
   padding: 40px 20px;
-  background-color: #f0f2f5;
-  background-image: linear-gradient(rgba(240, 242, 245, var(--sunshine-bg-opacity)), rgba(240, 242, 245, var(--sunshine-bg-opacity))), var(--sunshine-page-bg);
+  background-color: #ffffff;
+  background-image: var(--sunshine-page-bg);
+  /* 个人主页背景使用 cover，保持比例铺满页面，不会被拉伸变形。 */
   background-size: cover;
-  background-position: center;
+  background-position: center center;
+  background-repeat: no-repeat;
   background-attachment: fixed;
+  transition: background-image 0.3s ease;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.dashboard-page::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: var(--sunshine-page-bg);
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  filter: blur(var(--sunshine-bg-blur));
+  opacity: var(--sunshine-bg-opacity);
+  transform: scale(1.03);
 }
 
 .dashboard-inner {
   max-width: 920px;
   margin: 0 auto;
+  position: relative;
+  z-index: 1;
 }
 
 .dashboard-header {

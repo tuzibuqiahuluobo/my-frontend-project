@@ -170,30 +170,61 @@ watch(isDarkMode, applyBodyThemeClass)
 .main-layout {
   height: 100vh;
   width: 100vw;
-  background-color: #f0f2f5;
-  background-image: linear-gradient(rgba(240, 242, 245, var(--sunshine-bg-opacity)), rgba(240, 242, 245, var(--sunshine-bg-opacity))), var(--sunshine-page-bg);
+  background-color: #ffffff;
+  background-image: var(--sunshine-page-bg);
+  /* 背景图使用 cover + 居中，保证不拉伸变形，并让视觉中心始终对准屏幕中心。 */
   background-size: cover;
-  background-position: center;
+  background-position: center center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  transition: background-image 0.3s ease;
+  position: relative;
+  isolation: isolate;
 }
 
 .main-layout.dark-mode {
   background-color: #111827;
 }
 
+.main-layout::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: var(--sunshine-page-bg);
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  filter: blur(var(--sunshine-bg-blur));
+  opacity: var(--sunshine-bg-opacity);
+  transform: scale(1.03);
+}
+
+.main-layout > * {
+  position: relative;
+  z-index: 1;
+}
+
 /* 侧边栏外壳：加入 transition 让宽度变化时产生动画 */
 .aside-bar {
-  background-color: #ffffff;
-  border-right: 1px solid #e6e6e6;
+  /* 半透明背景配合 backdrop-filter，可以让侧栏像苹果系统的玻璃面板一样透出原图。 */
+  background-color: rgba(255, 255, 255, 0.46);
+  border-right: 1px solid rgba(255, 255, 255, 0.58);
+  backdrop-filter: blur(22px) saturate(160%);
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
   transition: width 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
   overflow-x: hidden;
 }
 
 .dark-mode .aside-bar {
-  background-color: #1f2937;
-  border-right-color: #374151;
+  background-color: rgba(17, 24, 39, 0.58);
+  border-right-color: rgba(148, 163, 184, 0.18);
 }
 
 .el-menu-vertical {
+  background-color: transparent;
   border-right: none;
   height: 100%;
 }
@@ -217,8 +248,11 @@ watch(isDarkMode, applyBodyThemeClass)
 
 /* 顶部栏样式：利用 flex 布局让标题和头像各占两头 */
 .top-header {
-  background-color: #ffffff;
+  /* 顶部栏也改成玻璃效果，红框区域会透出背景但文字仍然清楚。 */
+  background-color: rgba(255, 255, 255, 0.5);
   border-bottom: 2px solid color-mix(in srgb, var(--sunshine-theme-start, #409EFF) 30%, #e6e6e6);
+  backdrop-filter: blur(22px) saturate(160%);
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -226,8 +260,8 @@ watch(isDarkMode, applyBodyThemeClass)
 }
 
 .dark-mode .top-header {
-  background-color: #1f2937;
-  border-bottom-color: #374151;
+  background-color: rgba(17, 24, 39, 0.62);
+  border-bottom-color: rgba(148, 163, 184, 0.18);
 }
 
 .header-title h3 {
@@ -258,15 +292,25 @@ watch(isDarkMode, applyBodyThemeClass)
 
 .page-content {
   padding: 20px;
-  background-color: rgba(245, 247, 250, 0.82);
+  background-color: transparent;
+  background-image: var(--sunshine-page-bg);
+  background-size: cover;
+  background-position: center center;
+  transition: background-image 0.3s ease;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
 }
 
 .dark-mode .page-content {
-  background-color: #111827;
+  background-color: transparent;
 }
 
 .dark-mode :deep(.el-menu) {
-  background-color: #1f2937;
+  background-color: transparent;
+}
+
+:deep(.el-menu) {
+  background-color: transparent;
 }
 
 .dark-mode :deep(.el-menu-item),

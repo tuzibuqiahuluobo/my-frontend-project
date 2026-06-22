@@ -1,11 +1,11 @@
 <script setup>
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus' // 新增引入 ElMessageBox
 import 'vue-cropper/dist/index.css'
 import { VueCropper } from 'vue-cropper'
-import { apiRequest, getStoredUser, saveStoredUser } from '../api'
-import { AVATAR_MAX_BYTES, IMAGE_ACCEPT, assertImageFile, isGifFile, readFileAsDataUrl } from '../utils/imageTools'
+import { apiRequest, apiUpload, getStoredUser, saveStoredUser } from '../api'
+import { AVATAR_MAX_BYTES, IMAGE_ACCEPT, assertImageFile, compressBackgroundImageFile, isGifFile, readFileAsDataUrl } from '../utils/imageTools'
 import { INPUT_LIMITS, validateNicknameInput, validatePasswordInput, validateSignatureInput, validateUsernameInput } from '../utils/inputRules'
 import { DEFAULT_PERSONAL_STYLE, personalBackgroundStyle } from '../utils/personalStyle'
 
@@ -25,16 +25,29 @@ const backgroundInputRef = ref(null)
 const backgroundCropDialogVisible = ref(false)
 const backgroundCropperRef = ref(null)
 const rawBackgroundUrl = ref('')
+const rawBackgroundObjectUrl = ref('')
+const backgroundTarget = ref('profile')
 const editProfileBackground = ref('')
+const editWelcomeBackground = ref('')
+const pendingProfileBackgroundBlob = ref(null)
+const pendingWelcomeBackgroundBlob = ref(null)
 const editThemeColorStart = ref(DEFAULT_PERSONAL_STYLE.themeColorStart)
 const editThemeColorEnd = ref(DEFAULT_PERSONAL_STYLE.themeColorEnd)
 const editThemeOpacity = ref(DEFAULT_PERSONAL_STYLE.themeOpacity)
 const previewStyle = computed(() => personalBackgroundStyle({
   profile_background: editProfileBackground.value,
+  welcome_background: editWelcomeBackground.value,
   theme_color_start: editThemeColorStart.value,
   theme_color_end: editThemeColorEnd.value,
   theme_opacity: editThemeOpacity.value
 }))
+const welcomePreviewStyle = computed(() => personalBackgroundStyle({
+  profile_background: editProfileBackground.value,
+  welcome_background: editWelcomeBackground.value,
+  theme_color_start: editThemeColorStart.value,
+  theme_color_end: editThemeColorEnd.value,
+  theme_opacity: editThemeOpacity.value
+}, { target: 'welcome' }))
 
 // 裁剪器相关状态
 const fileInputRef = ref(null)
@@ -53,6 +66,11 @@ onMounted(() => {
     editNickname.value = currentUser.value.nickname || currentUser.value.username 
     editSignature.value = currentUser.value.signature || ''
     editProfileBackground.value = currentUser.value.profile_background || ''
+    editWelcomeBackground.value = currentUser.value.welcome_background || ''
+    revokeObjectUrl(rawBackgroundObjectUrl.value)
+    rawBackgroundObjectUrl.value = ''
+    pendingProfileBackgroundBlob.value = null
+    pendingWelcomeBackgroundBlob.value = null
     editThemeColorStart.value = currentUser.value.theme_color_start || DEFAULT_PERSONAL_STYLE.themeColorStart
     editThemeColorEnd.value = currentUser.value.theme_color_end || DEFAULT_PERSONAL_STYLE.themeColorEnd
     editThemeOpacity.value = Number.isFinite(Number(currentUser.value.theme_opacity)) ? Number(currentUser.value.theme_opacity) : DEFAULT_PERSONAL_STYLE.themeOpacity
@@ -60,8 +78,44 @@ onMounted(() => {
   }
 })
 
+const revokeObjectUrl = (url) => {
+  if (typeof url === 'string' && url.startsWith('blob:')) {
+    URL.revokeObjectURL(url)
+  }
+}
+
+const setRawBackgroundPreview = (url) => {
+  revokeObjectUrl(rawBackgroundObjectUrl.value)
+  rawBackgroundObjectUrl.value = url
+  rawBackgroundUrl.value = url
+}
+
+const setEditableBackgroundPreview = (target, url, blob) => {
+  // ObjectURL 只负责本次编辑的快速预览，真正持久化要等保存时把 blob 上传到后端。
+  if (target === 'welcome') {
+    revokeObjectUrl(editWelcomeBackground.value)
+    editWelcomeBackground.value = url
+    pendingWelcomeBackgroundBlob.value = blob
+    return
+  }
+  revokeObjectUrl(editProfileBackground.value)
+  editProfileBackground.value = url
+  pendingProfileBackgroundBlob.value = blob
+}
+
+const revokePendingBackgroundPreviews = () => {
+  revokeObjectUrl(rawBackgroundObjectUrl.value)
+  revokeObjectUrl(editProfileBackground.value)
+  revokeObjectUrl(editWelcomeBackground.value)
+  rawBackgroundObjectUrl.value = ''
+  pendingProfileBackgroundBlob.value = null
+  pendingWelcomeBackgroundBlob.value = null
+}
+
+onUnmounted(revokePendingBackgroundPreviews)
+
 // 【优化】将参数改为对象形式，方便后续无限扩展，清晰明了
-const updateProfile = async ({ newUsername, newAvatar, newPassword, newNickname, newSignature, currentPassword, profileBackground, themeColorStart, themeColorEnd, themeOpacity }) => {
+const updateProfile = async ({ newUsername, newAvatar, newPassword, newNickname, newSignature, currentPassword, profileBackground, welcomeBackground, themeColorStart, themeColorEnd, themeOpacity }) => {
   saving.value = true
   const requestBody = {
     username: newUsername || '',
@@ -77,6 +131,10 @@ const updateProfile = async ({ newUsername, newAvatar, newPassword, newNickname,
   if (profileBackground !== undefined) {
     // 背景图允许清空，所以只有明确传入时才提交给后端。
     requestBody.profile_background = profileBackground
+  }
+  if (welcomeBackground !== undefined) {
+    // 欢迎页背景单独保存，方便做更适合开屏的构图。
+    requestBody.welcome_background = welcomeBackground
   }
   if (themeColorStart) requestBody.theme_color_start = themeColorStart
   if (themeColorEnd) requestBody.theme_color_end = themeColorEnd
@@ -96,6 +154,7 @@ const updateProfile = async ({ newUsername, newAvatar, newPassword, newNickname,
       signature: data.signature,
       avatar: data.avatar,
       profile_background: data.profile_background,
+      welcome_background: data.welcome_background,
       theme_color_start: data.theme_color_start,
       theme_color_end: data.theme_color_end,
       theme_opacity: data.theme_opacity,
@@ -106,6 +165,7 @@ const updateProfile = async ({ newUsername, newAvatar, newPassword, newNickname,
     editNickname.value = currentUser.value.nickname || currentUser.value.username
     editSignature.value = currentUser.value.signature || ''
     editProfileBackground.value = currentUser.value.profile_background || ''
+    editWelcomeBackground.value = currentUser.value.welcome_background || ''
     editThemeColorStart.value = currentUser.value.theme_color_start || DEFAULT_PERSONAL_STYLE.themeColorStart
     editThemeColorEnd.value = currentUser.value.theme_color_end || DEFAULT_PERSONAL_STYLE.themeColorEnd
     editThemeOpacity.value = Number.isFinite(Number(currentUser.value.theme_opacity)) ? Number(currentUser.value.theme_opacity) : DEFAULT_PERSONAL_STYLE.themeOpacity
@@ -160,7 +220,8 @@ const confirmCrop = () => {
   })
 }
 
-const triggerBackgroundUpload = () => {
+const triggerBackgroundUpload = (target = 'profile') => {
+  backgroundTarget.value = target
   backgroundInputRef.value?.click()
 }
 
@@ -169,13 +230,14 @@ const onBackgroundSelected = async (event) => {
   if (!file) return
 
   try {
-    assertImageFile(file, 4 * 1024 * 1024, '背景图')
+    assertImageFile(file, 20 * 1024 * 1024, '背景图')
     if (isGifFile(file)) {
       ElMessage.warning('背景图暂不建议使用 GIF，请选择 JPG/PNG/WEBP 图片')
       return
     }
-    // 背景图先进入裁剪器，固定成宽幅比例，主界面、欢迎页和个人中心都能更稳定地展示。
-    rawBackgroundUrl.value = await readFileAsDataUrl(file)
+    // 先压缩成 Blob 再生成 ObjectURL，避免 Base64 体积膨胀和大图读取时卡住主线程。
+    const compressedBlob = await compressBackgroundImageFile(file)
+    setRawBackgroundPreview(URL.createObjectURL(compressedBlob))
     backgroundCropDialogVisible.value = true
   } catch (error) {
     ElMessage.error(error.message || '背景图读取失败，请重新选择')
@@ -186,17 +248,56 @@ const onBackgroundSelected = async (event) => {
 
 const confirmBackgroundCrop = () => {
   if (!backgroundCropperRef.value) return
-  backgroundCropperRef.value.getCropData((data) => {
-    editProfileBackground.value = data
-    backgroundCropDialogVisible.value = false
+  backgroundCropperRef.value.getCropBlob(async (blob) => {
+    try {
+      // 裁剪后的 Blob 再压缩一次，确保最终上传的是 1080p 级别的小体积图片。
+      const croppedFile = new File([blob], 'background.webp', { type: blob.type || 'image/png' })
+      const compressedBlob = await compressBackgroundImageFile(croppedFile)
+      setEditableBackgroundPreview(backgroundTarget.value, URL.createObjectURL(compressedBlob), compressedBlob)
+      backgroundCropDialogVisible.value = false
+    } catch (error) {
+      ElMessage.error(error.message || '背景图处理失败，请换一张图片试试')
+    }
   })
 }
 
-const clearBackground = () => {
+const clearBackground = (target = 'profile') => {
+  if (target === 'welcome') {
+    revokeObjectUrl(editWelcomeBackground.value)
+    editWelcomeBackground.value = ''
+    pendingWelcomeBackgroundBlob.value = null
+    return
+  }
+  revokeObjectUrl(editProfileBackground.value)
   editProfileBackground.value = ''
+  pendingProfileBackgroundBlob.value = null
 }
 
-const saveAllProfile = () => {
+const uploadBackgroundBlob = async (blob, target) => {
+  const formData = new FormData()
+  formData.append('image', blob, `${target}-background.webp`)
+  const data = await apiUpload('/api/upload-background', formData)
+  return data.url
+}
+
+const fillBackgroundUploadPayload = async (payload, styleChanged) => {
+  if (!styleChanged) return
+
+  if (pendingProfileBackgroundBlob.value) {
+    // 保存时才上传 Blob，用户只是预览但没点保存时不会产生无用文件。
+    payload.profileBackground = await uploadBackgroundBlob(pendingProfileBackgroundBlob.value, 'profile')
+  } else {
+    payload.profileBackground = editProfileBackground.value
+  }
+
+  if (pendingWelcomeBackgroundBlob.value) {
+    payload.welcomeBackground = await uploadBackgroundBlob(pendingWelcomeBackgroundBlob.value, 'welcome')
+  } else {
+    payload.welcomeBackground = editWelcomeBackground.value
+  }
+}
+
+const saveAllProfile = async () => {
   const newNickname = editNickname.value.trim()
   const newSignature = editSignature.value.trim()
   const newUsername = editUsername.value.trim()
@@ -249,6 +350,7 @@ const saveAllProfile = () => {
 
   const styleChanged =
     editProfileBackground.value !== (currentUser.value.profile_background || '') ||
+    editWelcomeBackground.value !== (currentUser.value.welcome_background || '') ||
     editThemeColorStart.value !== (currentUser.value.theme_color_start || DEFAULT_PERSONAL_STYLE.themeColorStart) ||
     editThemeColorEnd.value !== (currentUser.value.theme_color_end || DEFAULT_PERSONAL_STYLE.themeColorEnd) ||
     Number(editThemeOpacity.value) !== Number(currentUser.value.theme_opacity ?? DEFAULT_PERSONAL_STYLE.themeOpacity)
@@ -259,16 +361,22 @@ const saveAllProfile = () => {
   }
 
   if (styleChanged) {
-    payload.profileBackground = editProfileBackground.value
     payload.themeColorStart = editThemeColorStart.value
     payload.themeColorEnd = editThemeColorEnd.value
     payload.themeOpacity = Number(editThemeOpacity.value)
   }
 
-  const doSave = (currentPassword = '') => {
+  const doSave = async (currentPassword = '') => {
     // 统一保存按钮会把已修改的字段一次性提交；登录账号变更仍然需要当前密码做安全验证。
-    updateProfile({ ...payload, currentPassword })
-    editPassword.value = ''
+    try {
+      saving.value = true
+      await fillBackgroundUploadPayload(payload, styleChanged)
+      updateProfile({ ...payload, currentPassword })
+      editPassword.value = ''
+    } catch (error) {
+      saving.value = false
+      ElMessage.error(error.message || '背景图上传失败，请稍后再试')
+    }
   }
 
   if (!payload.newUsername) {
@@ -378,12 +486,24 @@ const saveAllProfile = () => {
 
             <input ref="backgroundInputRef" type="file" style="display: none;" accept="image/png,image/jpeg,image/webp" @change="onBackgroundSelected" />
             <div class="background-actions">
-              <el-button type="primary" plain @click="triggerBackgroundUpload">上传背景</el-button>
-              <el-button plain @click="clearBackground">恢复默认背景</el-button>
+              <el-button type="primary" plain @click="triggerBackgroundUpload('profile')">上传主站背景</el-button>
+              <el-button plain @click="clearBackground('profile')">恢复主站默认</el-button>
+            </div>
+
+            <div class="style-preview welcome-preview personalized-page" :style="welcomePreviewStyle">
+              <div class="style-preview-content">
+                <strong>SunShine</strong>
+                <span>预览欢迎页面背景</span>
+              </div>
+            </div>
+
+            <div class="background-actions">
+              <el-button type="primary" plain @click="triggerBackgroundUpload('welcome')">上传欢迎页背景</el-button>
+              <el-button plain @click="clearBackground('welcome')">恢复欢迎页默认</el-button>
             </div>
 
             <el-form label-width="110px" class="settings-form style-form">
-              <el-form-item label="背景透明度">
+              <el-form-item label="背景模糊强度">
                 <el-slider v-model="editThemeOpacity" :min="0" :max="0.85" :step="0.05" show-input />
               </el-form-item>
               <el-form-item label="渐变色一">
@@ -422,13 +542,14 @@ const saveAllProfile = () => {
           ref="backgroundCropperRef"
           :img="rawBackgroundUrl"
           :autoCrop="true"
-          :autoCropWidth="600"
-          :autoCropHeight="260"
-          :fixed="true"
-          :fixedNumber="[30, 13]"
+          :autoCropWidth="520"
+          :autoCropHeight="300"
+          :fixed="false"
           :fixedBox="false"
           :infoTrue="true"
-          outputType="jpeg"
+          :enlarge="2"
+          :outputSize="1"
+          outputType="png"
         />
       </div>
       <template #footer>
@@ -443,7 +564,7 @@ const saveAllProfile = () => {
 
 <style scoped>
 .profile-page {
-  background-color: #f0f2f5;
+  background-color: transparent;
   min-height: 100vh;
   padding: 40px 20px;
 }
@@ -507,10 +628,30 @@ const saveAllProfile = () => {
   display: flex;
   align-items: flex-end;
   overflow: hidden;
-  background-color: #0f172a;
-  background-image: linear-gradient(rgba(15, 23, 42, var(--sunshine-bg-opacity)), rgba(15, 23, 42, var(--sunshine-bg-opacity))), var(--sunshine-page-bg), linear-gradient(135deg, var(--sunshine-theme-start), var(--sunshine-theme-end));
+  position: relative;
+  isolation: isolate;
+  background-color: #ffffff;
+  background-image: var(--sunshine-page-bg), linear-gradient(135deg, var(--sunshine-theme-start), var(--sunshine-theme-end));
+  background-size: cover, cover;
+  background-position: center center, center;
+  background-repeat: no-repeat;
+  transition: background-image 0.3s ease;
+}
+
+.style-preview::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  /* 这里用同一张背景图做模糊层，而不是盖黑色透明层，预览会更接近苹果系统的玻璃质感。 */
+  background-image: var(--sunshine-page-bg);
   background-size: cover;
-  background-position: center;
+  background-position: center center;
+  background-repeat: no-repeat;
+  filter: blur(var(--sunshine-bg-blur));
+  opacity: var(--sunshine-bg-opacity);
+  transform: scale(1.04);
 }
 
 .style-preview-content {
@@ -518,10 +659,17 @@ const saveAllProfile = () => {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  position: relative;
+  z-index: 1;
+  text-shadow: 0 2px 12px rgba(15, 23, 42, 0.45);
 }
 
 .style-preview-content strong {
   font-size: 22px;
+}
+
+.welcome-preview {
+  min-height: 260px;
 }
 
 .background-actions {

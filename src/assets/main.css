@@ -47,9 +47,22 @@ body.sunshine-dark .el-image-viewer__wrapper {
   background-color: rgba(3, 7, 18, 0.88);
 }
 
+body.sunshine-dark .emote-trigger,
+body.sunshine-dark .emote-item {
+  background-color: #111827;
+  border-color: #374151;
+  color: #d1d5db;
+}
+
+body.sunshine-dark .emote-trigger:hover,
+body.sunshine-dark .emote-item:hover {
+  background-color: #1f2937;
+  border-color: #38bdf8;
+}
+
 /* 个人设置页夜间模式：这里放全局样式，避免 Vue scoped 选择器影响 Element Plus 内部节点。 */
 body.sunshine-dark .profile-page {
-  background-color: #111827 !important;
+  background-color: transparent !important;
 }
 
 body.sunshine-dark .profile-page .settings-card {
@@ -87,7 +100,7 @@ body.sunshine-dark .profile-page .el-input-group__append {
 
 /* 个人中心夜间模式：卡片和 Element Plus Empty 需要全局覆盖才稳定。 */
 body.sunshine-dark .dashboard-page {
-  background-color: #111827 !important;
+  background-color: transparent !important;
 }
 
 body.sunshine-dark .dashboard-page .profile-card,

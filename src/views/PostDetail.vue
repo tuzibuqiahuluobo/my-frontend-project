@@ -6,6 +6,7 @@ import { ArrowLeft, ChatDotRound, Delete, Star, StarFilled } from '@element-plus
 import { apiRequest, getStoredUser, isAdmin } from '../api'
 import PostImageGrid from '../components/PostImageGrid.vue'
 import CommentComposer from '../components/CommentComposer.vue'
+import BilibiliEmoteText from '../components/BilibiliEmoteText.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -156,7 +157,7 @@ onMounted(() => {
       </div>
 
       <h1 v-if="hasPostTitle(post)" class="detail-title">{{ post.title }}</h1>
-      <div class="post-content">{{ post.content }}</div>
+      <div class="post-content"><BilibiliEmoteText :text="post.content" /></div>
 
       <PostImageGrid :images="getPostImages(post)" />
 
@@ -213,7 +214,7 @@ onMounted(() => {
             <div v-if="comment.reply_to_nickname || comment.reply_to_username" class="reply-hint">
               回复 @{{ comment.reply_to_nickname || comment.reply_to_username }}
             </div>
-            <div class="comment-text">{{ comment.content }}</div>
+            <div class="comment-text"><BilibiliEmoteText :text="comment.content" /></div>
             <PostImageGrid :images="getCommentImages(comment)" compact />
           </div>
         </div>

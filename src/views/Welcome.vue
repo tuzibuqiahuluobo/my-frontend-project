@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { getStoredUser } from '../api'
 import { personalBackgroundStyle } from '../utils/personalStyle'
@@ -7,6 +7,10 @@ import { personalBackgroundStyle } from '../utils/personalStyle'
 const router = useRouter()
 const username = ref('SunShine')
 const currentUser = ref({})
+
+const welcomePageStyle = computed(() => ({
+  ...personalBackgroundStyle(currentUser.value, { target: 'welcome' })
+}))
 
 onMounted(() => {
   // 从本地记忆里读取用户名，用来打招呼
@@ -25,7 +29,7 @@ const enterSystem = () => {
 </script>
 
 <template>
-  <div class="welcome-container personalized-page" :style="personalBackgroundStyle(currentUser)" @click="enterSystem">
+  <div class="welcome-container personalized-page" :style="welcomePageStyle" @click="enterSystem">
     
     <div class="content">
       <h1 class="title">SunShine</h1>
@@ -42,22 +46,46 @@ const enterSystem = () => {
 /* ---- 布局样式 ---- */
 .welcome-container {
   width: 100vw;
-  height: 100vh;
-  background-color: #0f172a; /* 背景 */
-  background-image: linear-gradient(rgba(15, 23, 42, var(--sunshine-bg-opacity)), rgba(15, 23, 42, var(--sunshine-bg-opacity))), var(--sunshine-page-bg);
+  min-height: 100vh;
+  background-color: #ffffff; /* 背景 */
+  background-image: var(--sunshine-page-bg);
+  /* 欢迎页背景使用 cover + 居中，切换图片时不会拉伸变形，视觉中心也会稳定停在屏幕中心。 */
   background-size: cover;
-  background-position: center;
-  display: flex;
-  justify-content: center;
-  align-items: center;
+  background-position: center center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  transition: background-image 0.3s ease;
+  display: block;
   cursor: pointer; 
   user-select: none; /* 防止用户误双击选中文字 */
   overflow: hidden;
   position: relative;
 }
 
+.welcome-container::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  /* 用背景图自身做高斯模糊层，既保留原图色彩，也避免黑色蒙层让画面发灰。 */
+  background-image: var(--sunshine-page-bg);
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  filter: blur(var(--sunshine-bg-blur));
+  opacity: var(--sunshine-bg-opacity);
+  transform: scale(1.03);
+}
+
 .content {
   text-align: center;
+  width: 100%;
+  position: sticky;
+  top: 50vh;
+  transform: translateY(-50%);
+  z-index: 1;
 }
 
 .title {
@@ -91,9 +119,10 @@ const enterSystem = () => {
 }
 
 .bottom-line {
-  position: absolute;
+  position: fixed;
   bottom: 0;
   left: 0;
+  z-index: 1;
   width: 100%;
   height: 4px;
   background: linear-gradient(to right, transparent, var(--sunshine-theme-start, #38bdf8), var(--sunshine-theme-end, #818cf8), transparent);

@@ -4,11 +4,11 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ChatDotRound, Star, StarFilled, Delete, Picture, Edit } from '@element-plus/icons-vue'
 import { apiRequest, getStoredUser, isAdmin } from '../api'
-import TwemojiIcon from '../components/TwemojiIcon.vue'
 import PostImageGrid from '../components/PostImageGrid.vue'
 import CommentComposer from '../components/CommentComposer.vue'
+import BilibiliEmotePicker from '../components/BilibiliEmotePicker.vue'
+import BilibiliEmoteText from '../components/BilibiliEmoteText.vue'
 import { IMAGE_ACCEPT, POST_MAX_IMAGES, compressPostImages } from '../utils/imageTools'
-import { buildTwemojiCatalog, findTwemojiByCodePoint } from '../utils/twemojiCatalog'
 
 const router = useRouter()
 const route = useRoute()
@@ -33,16 +33,6 @@ const postImageInputRef = ref(null)
 const isSubmitting = ref(false)
 const isProcessingImage = ref(false)
 const editingPostId = ref(null)
-const emojiPageSize = 40
-const emojiPage = ref(1)
-// 表情数据由 Twemoji 解析器筛选生成，不在页面代码里手动维护一长串 emoji。
-const emojiList = buildTwemojiCatalog()
-const emojiButtonIcon = findTwemojiByCodePoint(0x1F642)
-const emojiPageCount = computed(() => Math.ceil(emojiList.length / emojiPageSize))
-const pagedEmojiList = computed(() => {
-  const start = (emojiPage.value - 1) * emojiPageSize
-  return emojiList.slice(start, start + emojiPageSize)
-})
 const currentTopic = computed(() => {
   return topics.value.find(topic => Number(topic.id) === Number(selectedTopicId.value)) || null
 })
@@ -223,9 +213,9 @@ const submitPost = async () => {
   }
 }
 
-const addEmojiToPost = (emoji) => {
-  // 点击表情时直接追加到输入框末尾，初学阶段这样最直观，也不会打断已有输入内容。
-  newPostContent.value += emoji
+const addEmojiToPost = (emoteCode) => {
+  // B 站表情使用 [表情名] 这种文本格式保存，别人没有安装同款表情包时也能看懂大概含义。
+  newPostContent.value += emoteCode
 }
 
 const resetPostForm = () => {
@@ -509,35 +499,7 @@ const formatDate = (timeString) => {
 
           <div class="publish-action">
             <div class="publish-tools">
-              <el-popover placement="bottom-start" trigger="click" width="340">
-                <template #reference>
-                  <button class="tool-trigger emoji-trigger" type="button" title="添加表情">
-                    <TwemojiIcon :emoji="emojiButtonIcon" />
-                  </button>
-                </template>
-                <div class="emoji-panel">
-                  <button
-                    v-for="emoji in pagedEmojiList"
-                    :key="emoji"
-                    class="emoji-item"
-                    type="button"
-                    @click="addEmojiToPost(emoji)"
-                  >
-                    <TwemojiIcon :emoji="emoji" />
-                  </button>
-                </div>
-                <div class="emoji-pagination">
-                  <el-pagination
-                    v-model:current-page="emojiPage"
-                    size="small"
-                    layout="prev, pager, next"
-                    :page-size="emojiPageSize"
-                    :total="emojiList.length"
-                    :pager-count="5"
-                  />
-                  <span class="emoji-page-text">{{ emojiPage }} / {{ emojiPageCount }}</span>
-                </div>
-              </el-popover>
+              <BilibiliEmotePicker @select="addEmojiToPost" />
               <button
                 class="tool-trigger image-trigger"
                 type="button"
@@ -599,7 +561,7 @@ const formatDate = (timeString) => {
           :class="postContentClass(post)"
           @click="goToPostDetail(post.id)"
         >
-          {{ post.content }}
+          <BilibiliEmoteText :text="post.content" />
         </div>
 
         <button v-if="shouldShowExpand(post)" type="button" class="expand-button" @click.stop="post.isExpanded = !post.isExpanded">
@@ -677,7 +639,7 @@ const formatDate = (timeString) => {
                     <div v-if="comment.reply_to_nickname || comment.reply_to_username" class="reply-hint">
                       回复 @{{ comment.reply_to_nickname || comment.reply_to_username }}
                     </div>
-                    <div class="comment-text">{{ comment.content }}</div>
+                    <div class="comment-text"><BilibiliEmoteText :text="comment.content" /></div>
                     <PostImageGrid :images="getCommentImages(comment)" compact />
                   </div>
                 </div>

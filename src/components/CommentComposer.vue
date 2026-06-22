@@ -3,9 +3,8 @@ import { computed, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Picture } from '@element-plus/icons-vue'
 import { apiRequest } from '../api'
-import TwemojiIcon from './TwemojiIcon.vue'
+import BilibiliEmotePicker from './BilibiliEmotePicker.vue'
 import { IMAGE_ACCEPT, POST_MAX_IMAGES, compressPostImages } from '../utils/imageTools'
-import { buildTwemojiCatalog, findTwemojiByCodePoint } from '../utils/twemojiCatalog'
 
 const props = defineProps({
   postId: {
@@ -33,22 +32,11 @@ const images = ref([])
 const imageInputRef = ref(null)
 const isSubmitting = ref(false)
 const isProcessingImage = ref(false)
-const emojiPageSize = 40
-const emojiPage = ref(1)
-// 新增：评论区和发帖区使用同一个 Twemoji 目录，避免两边表情不一致。
-const emojiList = buildTwemojiCatalog()
-const emojiButtonIcon = findTwemojiByCodePoint(0x1F642)
-
-const emojiPageCount = computed(() => Math.ceil(emojiList.length / emojiPageSize))
-const pagedEmojiList = computed(() => {
-  const start = (emojiPage.value - 1) * emojiPageSize
-  return emojiList.slice(start, start + emojiPageSize)
-})
 const replyName = computed(() => props.parentComment?.nickname || props.parentComment?.username || '')
 
-const addEmoji = (emoji) => {
-  // 新增：表情直接追加到评论末尾，初学阶段最容易理解，也不会破坏用户已经写好的文字。
-  content.value += emoji
+const addEmoji = (emoteCode) => {
+  // B 站表情使用 [表情名] 文本保存，后端不需要知道图片包，评论也更容易兼容。
+  content.value += emoteCode
 }
 
 const triggerImageUpload = () => {
@@ -152,35 +140,7 @@ const submitComment = async () => {
 
     <div class="comment-composer-actions">
       <div class="comment-tools">
-        <el-popover placement="bottom-start" trigger="click" width="340">
-          <template #reference>
-            <button class="comment-tool-trigger" type="button" title="添加表情">
-              <TwemojiIcon :emoji="emojiButtonIcon" />
-            </button>
-          </template>
-          <div class="emoji-panel">
-            <button
-              v-for="emoji in pagedEmojiList"
-              :key="emoji"
-              class="emoji-item"
-              type="button"
-              @click="addEmoji(emoji)"
-            >
-              <TwemojiIcon :emoji="emoji" />
-            </button>
-          </div>
-          <div class="emoji-pagination">
-            <el-pagination
-              v-model:current-page="emojiPage"
-              size="small"
-              layout="prev, pager, next"
-              :page-size="emojiPageSize"
-              :total="emojiList.length"
-              :pager-count="5"
-            />
-            <span class="emoji-page-text">{{ emojiPage }} / {{ emojiPageCount }}</span>
-          </div>
-        </el-popover>
+        <BilibiliEmotePicker size="small" @select="addEmoji" />
 
         <button
           class="comment-tool-trigger image-trigger"

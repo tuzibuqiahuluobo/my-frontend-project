@@ -52,3 +52,26 @@ export async function apiRequest(path, options = {}) {
   return data
 }
 
+export async function apiUpload(path, formData) {
+  const headers = {}
+  const user = getStoredUser()
+  if (user?.token) {
+    headers.Authorization = `Bearer ${user.token}`
+  }
+
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: 'POST',
+    headers,
+    body: formData
+  })
+
+  const text = await response.text()
+  const data = text ? JSON.parse(text) : {}
+  if (!response.ok || data.error) {
+    const error = new Error(data.error || `请求失败 (${response.status})`)
+    error.status = response.status
+    error.data = data
+    throw error
+  }
+  return data
+}
