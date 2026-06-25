@@ -93,6 +93,8 @@ const expandComposer = () => {
 const collapseComposerIfIdle = (event) => {
   // 新增：Element Plus 的下拉框和表情面板会挂到页面外层，点击它们时不应该被当成“空白处”。
   if (event.target?.closest?.('.el-popper')) return
+  // 新增：下载表情包弹窗也挂在页面外层，点击弹窗内容时不应该收起正在编辑的发帖框。
+  if (event.target?.closest?.('.el-overlay')) return
   // 新增：只有空草稿才自动收起；已经输入内容时保留展开，保护用户正在写的东西。
   if (!isComposerExpanded.value || hasComposerDraft.value) return
   if (composerRef.value && !composerRef.value.contains(event.target)) {

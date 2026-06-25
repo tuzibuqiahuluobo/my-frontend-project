@@ -164,7 +164,10 @@ onMounted(initPacks)
     v-model="marketVisible"
     width="640px"
     align-center
-    class="emote-market-dialog"
+    append-to-body
+    custom-class="emote-market-dialog"
+    modal-class="emote-market-overlay"
+    :z-index="4000"
   >
     <template #header>
       <div class="market-header">
@@ -480,30 +483,7 @@ onMounted(initPacks)
   border-radius: 16px;
 }
 
-:deep(.emote-market-dialog) {
-  border-radius: 18px;
-  overflow: hidden;
-  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.18);
-  max-width: calc(100vw - 32px);
-}
-
-:deep(.emote-market-dialog .el-dialog__header) {
-  margin: 0;
-  padding: 20px 22px 14px;
-  border-bottom: 1px solid #eef2f7;
-}
-
-:deep(.emote-market-dialog .el-dialog__body) {
-  max-height: calc(100vh - 180px);
-  padding: 14px 18px 18px;
-  overflow-y: auto;
-}
-
 @media (max-width: 640px) {
-  :deep(.emote-market-dialog) {
-    width: calc(100vw - 24px) !important;
-  }
-
   .market-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     min-height: auto;
@@ -513,6 +493,39 @@ onMounted(initPacks)
     align-items: flex-start;
     flex-direction: column;
     gap: 8px;
+  }
+}
+</style>
+
+<style>
+/* Element Plus 弹窗会被传送到 body 下方，所以这里不用 scoped，确保发帖、编辑、评论里的同一个弹窗都能吃到同一套尺寸。 */
+.emote-market-dialog,
+.emote-market-overlay .el-dialog {
+  width: 640px;
+  max-width: calc(100vw - 32px);
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.18);
+}
+
+.emote-market-dialog .el-dialog__header,
+.emote-market-overlay .el-dialog__header {
+  margin: 0;
+  padding: 20px 22px 14px;
+  border-bottom: 1px solid #eef2f7;
+}
+
+.emote-market-dialog .el-dialog__body,
+.emote-market-overlay .el-dialog__body {
+  max-height: calc(100vh - 180px);
+  padding: 14px 18px 18px;
+  overflow-y: auto;
+}
+
+@media (max-width: 640px) {
+  .emote-market-dialog,
+  .emote-market-overlay .el-dialog {
+    width: calc(100vw - 24px);
   }
 }
 </style>
