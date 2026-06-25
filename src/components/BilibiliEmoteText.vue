@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { loadCustomBiliEmojiPacks, loadDefaultBiliEmojiPack } from '../utils/biliEmojiPacks'
+import { ensureDefaultBiliEmojiPack, loadInstalledBiliEmojiPacks } from '../utils/biliEmojiPacks'
 
 const props = defineProps({
   text: {
@@ -22,14 +22,13 @@ const mapPackEmotes = (nextMap, pack) => {
 const loadEmoteMap = async () => {
   const nextMap = {}
   try {
-    // 默认“小黄脸”也放进解析表，这样帖子里的 [微笑]、[doge] 会直接渲染成图片。
-    const defaultPack = await loadDefaultBiliEmojiPack()
-    mapPackEmotes(nextMap, defaultPack)
+    // 先确保默认小黄脸已经下载，再把所有已安装表情包放进解析表。
+    await ensureDefaultBiliEmojiPack()
+    const packs = await loadInstalledBiliEmojiPacks()
+    packs.forEach(pack => mapPackEmotes(nextMap, pack))
   } catch (error) {
     // 默认包加载失败时不要影响正文显示，保留原文本能让用户至少看到发送内容。
   }
-
-  loadCustomBiliEmojiPacks().forEach(pack => mapPackEmotes(nextMap, pack))
   emoteMap.value = nextMap
 }
 
@@ -85,4 +84,3 @@ onUnmounted(() => {
   margin: 0 2px;
 }
 </style>
-

@@ -1,14 +1,14 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  DEFAULT_BILIEMOJI_PACK,
-  STORAGE_ACTIVE_KEY,
-  buildPackFromFiles,
-  emoteNameFromFile,
-  loadCustomBiliEmojiPacks,
-  loadDefaultBiliEmojiPack,
-  saveCustomBiliEmojiPacks
+  DEFAULT_PACK_ID,
+  downloadBiliEmojiPack,
+  ensureDefaultBiliEmojiPack,
+  getActiveBiliEmojiPackId,
+  loadInstalledBiliEmojiPacks,
+  loadRepoBiliEmojiPacks,
+  saveActiveBiliEmojiPack
 } from '../utils/biliEmojiPacks'
 
 const emit = defineEmits(['select'])
@@ -19,119 +19,107 @@ defineProps({
   }
 })
 
-const packs = ref([DEFAULT_BILIEMOJI_PACK])
-const activePackId = ref(DEFAULT_BILIEMOJI_PACK.id)
-const folderInputRef = ref(null)
-const loadingDefaultPack = ref(false)
+const packs = ref([])
+const activePackId = ref(DEFAULT_PACK_ID)
+const loading = ref(false)
+const pickerVisible = ref(false)
+const marketVisible = ref(false)
+const marketLoading = ref(false)
+const downloadingId = ref('')
+const marketPacks = ref([])
+const marketPage = ref(1)
+const pageSize = 25
 
 const activePack = computed(() => {
-  return packs.value.find(pack => pack.id === activePackId.value) || packs.value[0] || DEFAULT_BILIEMOJI_PACK
+  return packs.value.find(pack => pack.id === activePackId.value) || packs.value[0] || { name: '小黄脸', emotes: [] }
 })
 
-const setPackList = (builtinPack, customPacks = []) => {
-  packs.value = [builtinPack, ...customPacks]
-  if (!packs.value.some(pack => pack.id === activePackId.value)) {
-    activePackId.value = builtinPack.id
-  }
+const installedIds = computed(() => new Set(packs.value.map(pack => pack.id)))
+const marketTotal = computed(() => marketPacks.value.length)
+const pagedMarketPacks = computed(() => {
+  const start = (marketPage.value - 1) * pageSize
+  return marketPacks.value.slice(start, start + pageSize)
+})
+
+const refreshInstalledPacks = async () => {
+  const installed = await loadInstalledBiliEmojiPacks()
+  packs.value = installed
+  const storedActive = getActiveBiliEmojiPackId()
+  activePackId.value = installed.some(pack => pack.id === storedActive) ? storedActive : (installed[0]?.id || DEFAULT_PACK_ID)
 }
 
-const loadStoredPacks = async () => {
-  const customPacks = loadCustomBiliEmojiPacks()
-  activePackId.value = localStorage.getItem(STORAGE_ACTIVE_KEY) || DEFAULT_BILIEMOJI_PACK.id
-  setPackList(DEFAULT_BILIEMOJI_PACK, customPacks)
-
+const initPacks = async () => {
+  loading.value = true
   try {
-    loadingDefaultPack.value = true
-    // 默认表情包来自 lrhtony/BiliEmoji 的“小黄脸”，每个用户打开页面时都会自动加载，不需要自己手动导入。
-    const defaultPack = await loadDefaultBiliEmojiPack()
-    setPackList(defaultPack, customPacks)
+    await ensureDefaultBiliEmojiPack()
+    await refreshInstalledPacks()
   } catch (error) {
-    ElMessage.warning('默认小黄脸表情包加载失败，请检查网络后刷新页面')
+    ElMessage.warning(error.message || '默认小黄脸表情包加载失败')
   } finally {
-    loadingDefaultPack.value = false
+    loading.value = false
   }
 }
 
-const saveCustomPacks = () => {
-  saveCustomBiliEmojiPacks(packs.value, activePackId.value)
-}
-
-const readFileAsDataUrl = (file) => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = event => resolve(event.target.result)
-    reader.onerror = () => reject(new Error('表情图片读取失败'))
-    reader.readAsDataURL(file)
-  })
-}
-
-const packNameFromPath = (relativePath) => {
-  const parts = String(relativePath || '').split('/').filter(Boolean)
-  // 选择整个仓库时通常是“仓库名/表情包名/图片”，选择单个表情包时通常是“表情包名/图片”。
-  return parts.length >= 3 ? parts[1] : (parts[0] || '我的表情包')
-}
-
-const importPackFolder = async (event) => {
-  const files = Array.from(event.target.files || [])
-  const imageFiles = files.filter(file => file.type.startsWith('image/'))
-  event.target.value = ''
-  if (imageFiles.length === 0) {
-    ElMessage.warning('请选择包含图片的表情包文件夹')
-    return
-  }
-
-  const packMap = new Map()
-  for (const file of imageFiles) {
-    const packName = packNameFromPath(file.webkitRelativePath)
-    if (!packMap.has(packName)) {
-      packMap.set(packName, [])
-    }
-    const name = emoteNameFromFile(file.name)
-    packMap.get(packName).push({
-      name,
-      code: `[${name}]`,
-      fileName: file.name,
-      src: await readFileAsDataUrl(file)
-    })
-  }
-
-  const importedPacks = Array.from(packMap.entries()).map(([name, emotes]) => ({
-    ...buildPackFromFiles(name, []),
-    emotes: emotes.sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN'))
-  }))
-
-  try {
-    const existingCustomPacks = packs.value.filter(pack => !pack.builtin)
-    packs.value = [packs.value[0] || DEFAULT_BILIEMOJI_PACK, ...existingCustomPacks, ...importedPacks]
-    activePackId.value = importedPacks[0]?.id || activePackId.value
-    saveCustomPacks()
-    ElMessage.success(`已导入 ${importedPacks.length} 套表情包`)
-  } catch (error) {
-    ElMessage.error('表情包太大，浏览器本地存储放不下。请只导入常用的一套或精简图片数量。')
-    loadStoredPacks()
-  }
+const selectPack = (packId) => {
+  activePackId.value = packId
+  saveActiveBiliEmojiPack(packId)
 }
 
 const selectEmote = (emote) => {
   emit('select', emote.code)
 }
 
-const removeActivePack = () => {
-  if (activePack.value.builtin) {
-    ElMessage.info('默认小黄脸表情包不能删除')
-    return
+const openMarket = async () => {
+  // 点击“+”时先收起当前表情面板，否则两个浮层会叠在一起，用户会看不清下载弹窗。
+  pickerVisible.value = false
+  marketVisible.value = true
+  if (marketPacks.value.length > 0) return
+  marketLoading.value = true
+  try {
+    marketPacks.value = await loadRepoBiliEmojiPacks()
+  } catch (error) {
+    ElMessage.error(error.message || '在线表情包列表加载失败')
+  } finally {
+    marketLoading.value = false
   }
-  packs.value = packs.value.filter(pack => pack.id !== activePackId.value)
-  activePackId.value = DEFAULT_BILIEMOJI_PACK.id
-  saveCustomPacks()
-  ElMessage.success('已移除本地表情包')
 }
 
-onMounted(loadStoredPacks)
+const confirmDownload = async (pack) => {
+  if (installedIds.value.has(pack.id)) {
+    selectPack(pack.id)
+    marketVisible.value = false
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm(`确定下载「${pack.name}」表情包吗？下载后会缓存在当前浏览器里。`, '下载表情包', {
+      confirmButtonText: '下载',
+      cancelButtonText: '取消',
+      type: 'info'
+    })
+  } catch (error) {
+    return
+  }
+
+  downloadingId.value = pack.id
+  try {
+    await downloadBiliEmojiPack(pack.id)
+    await refreshInstalledPacks()
+    selectPack(pack.id)
+    marketVisible.value = false
+    ElMessage.success(`「${pack.name}」已下载`)
+  } catch (error) {
+    ElMessage.error(error.message || '表情包下载失败，请稍后再试')
+  } finally {
+    downloadingId.value = ''
+  }
+}
+
+onMounted(initPacks)
 </script>
 
 <template>
-  <el-popover placement="bottom-start" trigger="click" width="380">
+  <el-popover v-model:visible="pickerVisible" placement="bottom-start" trigger="click" width="360">
     <template #reference>
       <button class="emote-trigger" :class="size" type="button" title="添加 B 站表情">
         <span>☺</span>
@@ -139,22 +127,9 @@ onMounted(loadStoredPacks)
     </template>
 
     <div class="emote-panel">
-      <div class="emote-toolbar">
-        <el-select v-model="activePackId" size="small" class="pack-select" @change="saveCustomPacks">
-          <el-option v-for="pack in packs" :key="pack.id" :label="pack.name" :value="pack.id" />
-        </el-select>
-        <el-button size="small" plain @click="folderInputRef?.click()">导入</el-button>
-        <el-button size="small" plain type="danger" @click="removeActivePack">移除</el-button>
-        <input ref="folderInputRef" type="file" hidden multiple webkitdirectory @change="importPackFolder">
-      </div>
+      <div class="pack-title">{{ activePack.name }}</div>
 
-      <a v-if="activePack.builtin" class="source-link" :href="activePack.source" target="_blank" rel="noreferrer">
-        默认表情来源：BiliEmoji / 小黄脸
-      </a>
-
-      <div v-if="loadingDefaultPack && activePack.builtin" class="emote-loading">
-        正在加载小黄脸...
-      </div>
+      <div v-if="loading" class="emote-loading">正在加载表情包...</div>
       <div v-else class="emote-grid">
         <button
           v-for="emote in activePack.emotes"
@@ -164,12 +139,72 @@ onMounted(loadStoredPacks)
           :title="emote.code"
           @click="selectEmote(emote)"
         >
-          <img v-if="emote.src" :src="emote.src" :alt="emote.name" loading="lazy">
-          <span v-else>{{ emote.name }}</span>
+          <img :src="emote.src" :alt="emote.name" loading="lazy">
         </button>
+      </div>
+
+      <div class="pack-switcher">
+        <button
+          v-for="pack in packs"
+          :key="pack.id"
+          type="button"
+          class="pack-tab"
+          :class="{ active: pack.id === activePackId }"
+          :title="pack.name"
+          @click="selectPack(pack.id)"
+        >
+          <img :src="pack.icon" :alt="pack.name" loading="lazy">
+        </button>
+        <button class="pack-tab add-tab" type="button" title="下载更多表情包" @click="openMarket">+</button>
       </div>
     </div>
   </el-popover>
+
+  <el-dialog
+    v-model="marketVisible"
+    width="640px"
+    align-center
+    class="emote-market-dialog"
+  >
+    <template #header>
+      <div class="market-header">
+        <div>
+          <h3>下载表情包</h3>
+          <p>选择喜欢的系列，下载后会保存在当前浏览器里。</p>
+        </div>
+        <span class="market-count">共 {{ marketTotal }} 套</span>
+      </div>
+    </template>
+
+    <el-skeleton v-if="marketLoading" :rows="6" animated />
+    <template v-else>
+      <div class="market-grid" v-if="pagedMarketPacks.length">
+        <button
+          v-for="pack in pagedMarketPacks"
+          :key="pack.id"
+          type="button"
+          class="market-card"
+          :class="{ installed: installedIds.has(pack.id) }"
+          :disabled="downloadingId === pack.id"
+          @click="confirmDownload(pack)"
+        >
+          <img :src="pack.icon" :alt="pack.name" loading="lazy">
+          <span>{{ pack.name }}</span>
+          <small>{{ installedIds.has(pack.id) ? '已下载' : (downloadingId === pack.id ? '下载中...' : '点击下载') }}</small>
+        </button>
+      </div>
+      <div v-else class="market-empty">暂时没有可下载的表情包</div>
+      <div class="market-pagination">
+        <el-pagination
+          v-model:current-page="marketPage"
+          layout="prev, pager, next"
+          :page-size="pageSize"
+          :total="marketTotal"
+          small
+        />
+      </div>
+    </template>
+  </el-dialog>
 </template>
 
 <style scoped>
@@ -206,27 +241,17 @@ onMounted(loadStoredPacks)
 .emote-panel {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-}
-
-.emote-toolbar {
-  display: flex;
   gap: 8px;
-  align-items: center;
 }
 
-.pack-select {
-  flex: 1;
-}
-
-.source-link {
-  color: #409eff;
-  font-size: 12px;
-  text-decoration: none;
+.pack-title {
+  font-size: 13px;
+  color: #64748b;
+  padding: 2px 2px 0;
 }
 
 .emote-loading {
-  min-height: 120px;
+  min-height: 210px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -236,37 +261,258 @@ onMounted(loadStoredPacks)
 
 .emote-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 8px;
-  max-height: 300px;
-  overflow: auto;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 7px;
+  max-height: 230px;
+  overflow-y: auto;
+  padding: 4px 2px;
 }
 
 .emote-item {
-  min-height: 52px;
-  border: 1px solid #e5e7eb;
-  background: #f8fafc;
-  border-radius: 10px;
+  width: 38px;
+  height: 38px;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
   cursor: pointer;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 6px;
-  color: #475569;
-  font-size: 12px;
-  line-height: 1.2;
+  padding: 3px;
   transition: background-color 0.15s, transform 0.15s;
 }
 
 .emote-item:hover {
-  background: #e0f2fe;
+  background: #eef6ff;
   transform: translateY(-1px);
 }
 
 .emote-item img {
-  max-width: 40px;
-  max-height: 40px;
+  max-width: 32px;
+  max-height: 32px;
   object-fit: contain;
 }
-</style>
 
+.pack-switcher {
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  overflow-x: auto;
+  box-sizing: border-box;
+}
+
+.pack-tab {
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  border-radius: 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  padding: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+  transition: border-color 0.18s, background-color 0.18s, box-shadow 0.18s, transform 0.18s;
+}
+
+.pack-tab:hover {
+  border-color: #7dd3fc;
+  background: #f0f9ff;
+  box-shadow: 0 6px 16px rgba(56, 189, 248, 0.16);
+  transform: translateY(-1px);
+}
+
+.pack-tab.active {
+  background: #ffffff;
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.14), 0 6px 16px rgba(56, 189, 248, 0.18);
+}
+
+.pack-tab img {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  display: block;
+}
+
+.add-tab {
+  color: #38bdf8;
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1;
+  background: linear-gradient(135deg, #ffffff 0%, #f0f9ff 100%);
+}
+
+.market-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-right: 28px;
+}
+
+.market-header h3 {
+  margin: 0;
+  color: #1f2937;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.market-header p {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.market-count {
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  color: #0284c7;
+  font-size: 12px;
+  font-weight: 600;
+  background: #e0f2fe;
+  border: 1px solid #bae6fd;
+  border-radius: 999px;
+}
+
+.market-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+  padding: 12px;
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+}
+
+.market-card {
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  border-radius: 14px;
+  padding: 9px 7px;
+  cursor: pointer;
+  min-height: 88px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.05);
+  transition: border-color 0.15s, background-color 0.15s, box-shadow 0.15s, transform 0.15s;
+}
+
+.market-card:hover {
+  border-color: #38bdf8;
+  background: #f8fdff;
+  box-shadow: 0 10px 24px rgba(56, 189, 248, 0.16);
+  transform: translateY(-2px);
+}
+
+.market-card:disabled {
+  cursor: wait;
+  opacity: 0.72;
+  transform: none;
+}
+
+.market-card.installed {
+  background: linear-gradient(180deg, #ffffff 0%, #eff6ff 100%);
+  border-color: #7dd3fc;
+}
+
+.market-card img {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+  padding: 6px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 13px;
+  box-sizing: border-box;
+}
+
+.market-card span {
+  width: 100%;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.market-card small {
+  padding: 3px 8px;
+  color: #64748b;
+  font-size: 11px;
+  background: #f1f5f9;
+  border-radius: 999px;
+}
+
+.market-pagination {
+  display: flex;
+  justify-content: center;
+  margin-top: 18px;
+  padding-top: 4px;
+}
+
+.market-empty {
+  min-height: 240px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #94a3b8;
+  font-size: 13px;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 16px;
+}
+
+:deep(.emote-market-dialog) {
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.18);
+  max-width: calc(100vw - 32px);
+}
+
+:deep(.emote-market-dialog .el-dialog__header) {
+  margin: 0;
+  padding: 20px 22px 14px;
+  border-bottom: 1px solid #eef2f7;
+}
+
+:deep(.emote-market-dialog .el-dialog__body) {
+  max-height: calc(100vh - 180px);
+  padding: 14px 18px 18px;
+  overflow-y: auto;
+}
+
+@media (max-width: 640px) {
+  :deep(.emote-market-dialog) {
+    width: calc(100vw - 24px) !important;
+  }
+
+  .market-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    min-height: auto;
+  }
+
+  .market-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+}
+</style>
