@@ -12,8 +12,16 @@ const WORLD_COLS = 220
 const VIEW_WIDTH = TILE * 16
 const VIEW_HEIGHT = TILE * WORLD_ROWS
 const GRAVITY = 0.72
-const MOVE_SPEED = 4.2
-const JUMP_SPEED = -13.6
+const MOVE_ACCEL = 0.42
+const GROUND_FRICTION = 0.82
+const NORMAL_MAX_SPEED = 4.2
+const RUN_MAX_SPEED = 6.4
+const JUMP_SPEED = -11.2
+const JUMP_HOLD_FORCE = -0.38
+const JUMP_HOLD_FRAMES = 18
+const SCORE_LIMIT = 100000000
+const SMALL_PLAYER = { w: 34, h: 46 }
+const BIG_PLAYER = { w: 38, h: 66 }
 const ASSET_BASE = '/games/mushroom-run/'
 
 const stats = reactive({
@@ -27,7 +35,10 @@ const stats = reactive({
 const keys = reactive({
   left: false,
   right: false,
-  jump: false
+  up: false,
+  down: false,
+  jump: false,
+  run: false
 })
 
 const images = {}
@@ -41,20 +52,32 @@ let coins = []
 let enemies = []
 let rewards = []
 let platforms = []
+let trees = []
 let flag = null
 let player = null
 
 const assetList = [
   ['tiles', `${ASSET_BASE}tiles.png`],
-  ['idle', `${ASSET_BASE}player-idle.png`],
-  ['run1', `${ASSET_BASE}player-run-1.png`],
-  ['run2', `${ASSET_BASE}player-run-2.png`],
-  ['jump', `${ASSET_BASE}player-jump.png`],
+  ['smallIdle', `${ASSET_BASE}red_1.png`],
+  ['bigIdle', `${ASSET_BASE}red_13.png`],
+  ['run1', `${ASSET_BASE}red_2.png`],
+  ['run2', `${ASSET_BASE}red_3.png`],
+  ['run3', `${ASSET_BASE}red_4.png`],
+  ['brake', `${ASSET_BASE}red_5.png`],
+  ['jumpSmall', `${ASSET_BASE}red_6.png`],
+  ['climb1', `${ASSET_BASE}red_7.png`],
+  ['climb2', `${ASSET_BASE}red_8.png`],
   ['monster', `${ASSET_BASE}monster.png`],
-  ['reward', `${ASSET_BASE}reward.png`]
+  ['redMushroom', `${ASSET_BASE}red-mushroom.png`],
+  ['greenMushroom', `${ASSET_BASE}green-mushroom.png`],
+  ['coin1', `${ASSET_BASE}coin-1.png`],
+  ['coin2', `${ASSET_BASE}coin-2.png`],
+  ['coin3', `${ASSET_BASE}coin-3.png`],
+  ['treeBranch', `${ASSET_BASE}tree-branch.png`],
+  ['treeRoot', `${ASSET_BASE}tree-root.png`]
 ]
 
-const sourceNote = '素材来源于网络，仅用于学习交流；音效和背景音乐接口已预留，后续可继续添加。'
+const sourceNote = '素材来源于网络，仅用于学习交流'
 
 const hudText = computed(() => {
   return `金币 ${stats.coins} / 生命 ${stats.lives} / 分数 ${stats.score} / 最佳 ${stats.best}`
@@ -62,6 +85,19 @@ const hudText = computed(() => {
 
 const rectsOverlap = (a, b) => {
   return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y
+}
+
+const addScore = (amount) => {
+  stats.score += amount
+  if (stats.score >= SCORE_LIMIT) {
+    // 分数到达上限后清零并加命，避免数字无限变大，也符合“满分奖励”的游戏规则。
+    stats.score = 0
+    stats.lives += 1
+    gameMessage.value = '分数满额，奖励 1 条生命'
+    playSound('one-up')
+  }
+  stats.best = Math.max(stats.best, stats.score)
+  localStorage.setItem('sunshine-mushroom-run-best', String(stats.best))
 }
 
 const playSound = (name) => {
@@ -101,6 +137,7 @@ const buildLevel = () => {
   coins = []
   enemies = []
   rewards = []
+  trees = []
   particles = []
   cameraX = 0
   flag = { x: cell(205), y: cell(6), w: 28, h: cell(7) }
@@ -111,7 +148,8 @@ const buildLevel = () => {
   const addBrick = (start, row, length = 1) => platforms.push(makePlatform(cell(start), cell(row), cell(length), 28, 'brick'))
   const addPipe = (start, row, width = 2, height = 2) => platforms.push(makePlatform(cell(start), cell(row), cell(width), cell(height), 'pipe'))
   const addCoin = (col, row) => coins.push({ x: cell(col) + 9, y: cell(row) + 8, w: 22, h: 22, taken: false })
-  const addReward = (col, row) => rewards.push({ x: cell(col) + 4, y: cell(row) + 4, w: 32, h: 32, taken: false })
+  const addReward = (col, row, type = 'red') => rewards.push({ x: cell(col) + 4, y: cell(row) + 4, w: 32, h: 32, type, taken: false })
+  const addTree = (col, topRow, bottomRow) => trees.push({ x: cell(col), y: cell(topRow), w: TILE, h: cell(bottomRow - topRow + 1) })
   const addEnemy = (col, min, max, speed = -1.1) => {
     enemies.push({ x: cell(col), y: groundY - 42, w: 38, h: 42, vx: speed, min: cell(min), max: cell(max), alive: true })
   }
@@ -126,6 +164,9 @@ const buildLevel = () => {
   addPipe(64, 10, 2, 4)
   addPipe(118, 12, 2, 2)
   addPipe(161, 12, 2, 2)
+
+  addTree(72, 8, 13)
+  addTree(183, 7, 13)
 
   addBrick(14, 10, 4)
   addBrick(31, 9, 1)
@@ -145,9 +186,9 @@ const buildLevel = () => {
   }
 
   ;[
-    [16, 9], [32, 8], [40, 9], [57, 8], [78, 8], [96, 7], [132, 9],
-    [157, 9], [189, 5], [204, 9], [214, 9]
-  ].forEach(([col, row]) => addReward(col, row))
+    [16, 9, 'red'], [32, 8, 'green'], [40, 9, 'red'], [57, 8, 'green'], [78, 8, 'red'], [96, 7, 'green'],
+    [132, 9, 'red'], [157, 9, 'green'], [189, 5, 'red'], [204, 9, 'green'], [214, 9, 'red']
+  ].forEach(([col, row, type]) => addReward(col, row, type))
 
   ;[
     [18, 11], [19, 11], [20, 11], [38, 11], [39, 11], [55, 9], [56, 9],
@@ -173,7 +214,13 @@ const buildLevel = () => {
     facing: 1,
     onGround: false,
     invincible: 0,
-    frame: 0
+    frame: 0,
+    big: false,
+    growing: 0,
+    braking: 0,
+    climbing: false,
+    canJump: true,
+    jumpHold: 0
   }
 }
 
@@ -203,6 +250,10 @@ const restartFromCheckpoint = () => {
   player.vx = 0
   player.vy = 0
   player.invincible = 90
+  player.big = false
+  player.growing = 0
+  player.climbing = false
+  setPlayerSize(SMALL_PLAYER)
 }
 
 const loseLife = (message) => {
@@ -219,7 +270,7 @@ const loseLife = (message) => {
 
 const finishGame = () => {
   gameStarted.value = false
-  stats.score += stats.time * 5 + stats.coins * 25
+  addScore(stats.time * 5 + stats.coins * 25)
   stats.best = Math.max(stats.best, stats.score)
   localStorage.setItem('sunshine-mushroom-run-best', String(stats.best))
   gameMessage.value = '通关完成，漂亮！'
@@ -228,6 +279,66 @@ const finishGame = () => {
 
 const addParticle = (x, y, text) => {
   particles.push({ x, y, text, life: 42 })
+}
+
+const clamp = (value, min, max) => Math.max(min, Math.min(max, value))
+
+const setPlayerSize = (size) => {
+  const oldBottom = player.y + player.h
+  player.w = size.w
+  player.h = size.h
+  player.y = oldBottom - player.h
+}
+
+const growPlayer = () => {
+  if (player.big) {
+    addScore(1000)
+    addParticle(player.x + player.w / 2, player.y, '+1000')
+    return
+  }
+
+  // 红蘑菇会让玩家变大，所以这里保持脚底位置不变，只把身体向上增高，避免“长大后陷进地面”。
+  player.big = true
+  player.growing = 36
+  setPlayerSize(BIG_PLAYER)
+  gameMessage.value = '吃到红蘑菇，变大了！'
+  playSound('power-up')
+}
+
+const collectGreenMushroom = () => {
+  stats.lives += 1
+  addScore(1000)
+  addParticle(player.x + player.w / 2, player.y, '+1UP')
+  gameMessage.value = '吃到绿蘑菇，生命 +1'
+  playSound('one-up')
+}
+
+const isJumpKey = (key) => ['ArrowUp', 'w', 'W', ' '].includes(key)
+const isRunKey = (key) => ['Shift', 'j', 'J', 'k', 'K'].includes(key)
+
+const pressJump = () => {
+  if (keys.jump || !player) return
+  keys.jump = true
+  if (!player.canJump || !player.onGround) return
+
+  // 起跳只在“按下这一刻”触发，按住不会重复跳；后面的长按只负责让本次跳跃更高。
+  player.vy = JUMP_SPEED
+  player.onGround = false
+  player.climbing = false
+  player.canJump = false
+  player.jumpHold = JUMP_HOLD_FRAMES
+  playSound('jump')
+}
+
+const releaseJump = () => {
+  keys.jump = false
+  if (!player) return
+  player.canJump = true
+  player.jumpHold = 0
+}
+
+const findTouchedTree = () => {
+  return trees.find(tree => rectsOverlap(player, tree))
 }
 
 const applyHorizontalCollision = () => {
@@ -259,27 +370,48 @@ const applyVerticalCollision = () => {
 const updatePlayer = () => {
   const left = keys.left
   const right = keys.right
-  player.vx = 0
-  if (left) {
-    player.vx = -MOVE_SPEED
-    player.facing = -1
-  }
-  if (right) {
-    player.vx = MOVE_SPEED
-    player.facing = 1
-  }
-  if (keys.jump && player.onGround) {
-    player.vy = JUMP_SPEED
-    player.onGround = false
-    playSound('jump')
+  const inputDir = left && !right ? -1 : right && !left ? 1 : 0
+  const touchedTree = findTouchedTree()
+  player.climbing = Boolean(touchedTree && (keys.up || keys.down) && Math.abs(player.vx) < 2.8)
+
+  if (player.climbing) {
+    player.vx *= 0.72
+    player.vy = keys.up ? -3.2 : (keys.down ? 3.2 : 0)
+    player.x = clamp(player.x, touchedTree.x - 8, touchedTree.x + touchedTree.w - player.w + 8)
+  } else {
+    const maxSpeed = keys.run ? RUN_MAX_SPEED : NORMAL_MAX_SPEED
+    if (inputDir !== 0) {
+      const isOppositeInput = Math.abs(player.vx) > 1.2 && Math.sign(player.vx) !== inputDir
+      player.braking = isOppositeInput ? 12 : Math.max(0, player.braking - 1)
+
+      // 移动使用加速度而不是直接给固定速度，这样起步、加速和急停会更自然。
+      player.vx += inputDir * MOVE_ACCEL
+      player.vx = clamp(player.vx, -maxSpeed, maxSpeed)
+      if (!isOppositeInput || Math.abs(player.vx) < 1.6) player.facing = inputDir
+    } else {
+      player.vx *= player.onGround ? GROUND_FRICTION : 0.98
+      player.braking = Math.max(0, player.braking - 1)
+      if (Math.abs(player.vx) < 0.08) player.vx = 0
+    }
+
+    if (keys.jump && player.jumpHold > 0 && player.vy < 0) {
+      player.vy += JUMP_HOLD_FORCE
+      player.jumpHold -= 1
+    }
+
+    player.vy += GRAVITY
   }
 
-  player.vy += GRAVITY
   player.vy = Math.min(player.vy, 14)
   applyHorizontalCollision()
   applyVerticalCollision()
+  if (player.onGround) {
+    player.canJump = !keys.jump
+    player.jumpHold = 0
+  }
   player.x = Math.max(0, Math.min(player.x, WORLD_COLS * TILE - player.w))
-  player.frame += Math.abs(player.vx) > 0 ? 0.18 : 0.05
+  player.frame += Math.abs(player.vx) > 0 ? (keys.run ? 0.32 : 0.18) : 0.05
+  if (player.growing > 0) player.growing -= 1
   if (player.invincible > 0) player.invincible -= 1
   if (player.y > VIEW_HEIGHT + 160) loseLife('掉下去了，重新来')
 }
@@ -295,8 +427,8 @@ const updateEnemies = () => {
     if (stomp) {
       enemy.alive = false
       player.vy = -8
-      stats.score += 100
-      addParticle(enemy.x, enemy.y, '+100')
+      addScore(200)
+      addParticle(enemy.x, enemy.y, '+200')
       playSound('stomp')
     } else {
       loseLife('碰到巡逻怪物了')
@@ -309,16 +441,19 @@ const updateCollectibles = () => {
     if (coin.taken || !rectsOverlap(player, coin)) continue
     coin.taken = true
     stats.coins += 1
-    stats.score += 20
-    addParticle(coin.x, coin.y, '+20')
+    addScore(100)
+    addParticle(coin.x, coin.y, '+100')
     playSound('coin')
   }
 
   for (const reward of rewards) {
     if (reward.taken || !rectsOverlap(player, reward)) continue
     reward.taken = true
-    stats.score += 150
-    addParticle(reward.x, reward.y, '+150')
+    if (reward.type === 'red') {
+      growPlayer()
+    } else {
+      collectGreenMushroom()
+    }
     playSound('reward')
   }
 
@@ -388,22 +523,28 @@ const drawPlatforms = () => {
   }
 }
 
+const drawTrees = () => {
+  trees.forEach(tree => {
+    for (let y = tree.y; y < tree.y + tree.h - TILE; y += TILE) {
+      ctx.drawImage(images.treeBranch, Math.round(tree.x - cameraX), Math.round(y), TILE, TILE)
+    }
+    ctx.drawImage(images.treeRoot, Math.round(tree.x - cameraX), Math.round(tree.y + tree.h - TILE), TILE, TILE)
+  })
+}
+
 const drawCollectibles = () => {
   coins.forEach((coin, index) => {
     if (coin.taken) return
     const wobble = Math.sin(performance.now() / 180 + index) * 3
-    ctx.fillStyle = '#ffd34d'
-    ctx.strokeStyle = '#b36b00'
-    ctx.lineWidth = 2
-    ctx.beginPath()
-    ctx.ellipse(coin.x - cameraX + 11, coin.y + 11 + wobble, 10, 13, 0, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.stroke()
+    const coinFrames = [images.coin1, images.coin2, images.coin3]
+    const sprite = coinFrames[Math.floor(performance.now() / 120 + index) % coinFrames.length]
+    ctx.drawImage(sprite, Math.round(coin.x - cameraX), Math.round(coin.y + wobble), coin.w, coin.h)
   })
 
   rewards.forEach(reward => {
     if (!reward.taken) {
-      ctx.drawImage(images.reward, Math.round(reward.x - cameraX), Math.round(reward.y), reward.w, reward.h)
+      const sprite = reward.type === 'green' ? images.greenMushroom : images.redMushroom
+      ctx.drawImage(sprite, Math.round(reward.x - cameraX), Math.round(reward.y), reward.w, reward.h)
     }
   })
 }
@@ -443,7 +584,20 @@ const drawFlag = () => {
 }
 
 const drawPlayer = () => {
-  const sprite = !player.onGround ? images.jump : (Math.abs(player.vx) > 0.2 ? (Math.floor(player.frame) % 2 ? images.run1 : images.run2) : images.idle)
+  let sprite = player.big ? images.bigIdle : images.smallIdle
+  if (player.growing > 0) {
+    sprite = Math.floor(player.growing / 4) % 2 === 0 ? images.bigIdle : images.smallIdle
+  } else if (player.climbing) {
+    sprite = Math.floor(player.frame) % 2 === 0 ? images.climb1 : images.climb2
+  } else if (!player.onGround) {
+    sprite = player.big ? images.bigIdle : images.jumpSmall
+  } else if (player.braking > 0 && Math.abs(player.vx) > 0.5) {
+    sprite = images.brake
+  } else if (Math.abs(player.vx) > 0.2) {
+    const runFrames = [images.run1, images.run2, images.run3]
+    sprite = runFrames[Math.floor(player.frame) % runFrames.length]
+  }
+
   if (player.invincible > 0 && Math.floor(player.invincible / 5) % 2 === 0) return
   ctx.save()
   const drawW = player.w
@@ -489,6 +643,7 @@ const renderGame = () => {
   ctx.clearRect(0, 0, VIEW_WIDTH, VIEW_HEIGHT)
   drawBackground()
   drawPlatforms()
+  drawTrees()
   drawFlag()
   drawCollectibles()
   drawEnemies()
@@ -508,12 +663,17 @@ const loop = (time) => {
 const setKey = (key, value) => {
   if (key === 'ArrowLeft' || key === 'a' || key === 'A') keys.left = value
   if (key === 'ArrowRight' || key === 'd' || key === 'D') keys.right = value
-  if (key === 'ArrowUp' || key === 'w' || key === 'W' || key === ' ') keys.jump = value
+  if (key === 'ArrowUp' || key === 'w' || key === 'W') keys.up = value
+  if (key === 'ArrowDown' || key === 's' || key === 'S') keys.down = value
+  if (isRunKey(key)) keys.run = value
+  if (isJumpKey(key) && value) pressJump()
+  if (isJumpKey(key) && !value) releaseJump()
 }
 
 const onKeyDown = (event) => {
-  const handled = ['ArrowLeft', 'ArrowRight', 'ArrowUp', ' ', 'a', 'A', 'd', 'D', 'w', 'W'].includes(event.key)
+  const handled = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', ' ', 'a', 'A', 'd', 'D', 'w', 'W', 's', 'S', 'Shift', 'j', 'J', 'k', 'K'].includes(event.key)
   if (handled) event.preventDefault()
+  if (event.repeat && isJumpKey(event.key)) return
   setKey(event.key, true)
 }
 
@@ -522,6 +682,11 @@ const onKeyUp = (event) => {
 }
 
 const holdControl = (name, value) => {
+  if (name === 'jump') {
+    if (value) pressJump()
+    else releaseJump()
+    return
+  }
   keys[name] = value
 }
 
@@ -549,7 +714,7 @@ onBeforeUnmount(() => {
       <div class="game-copy">
         <span class="game-kicker">SunShine 游戏中心</span>
         <h1>蘑菇跳跃冒险</h1>
-        <p>一款轻量浏览器横版跳跃小游戏，按 1-1 总览图的 220 x 16 格尺寸搭建，单屏显示 16 格。当前版本先完成移动、跳跃、金币、怪物、通关和失败判断。</p>
+        <p>一款轻量浏览器横版跳跃小游戏，按 1-1 总览图的 220 x 16 格尺寸搭建，单屏显示 16 格。当前版本已加入移动加速、长按跳跃、金币动画、蘑菇奖励、爬树帧和通关判断。</p>
       </div>
       <div class="game-panel">
         <div class="game-panel-title">当前游戏</div>
@@ -583,7 +748,7 @@ onBeforeUnmount(() => {
     <section class="game-info">
       <article>
         <h2>玩法</h2>
-        <p>方向键或 A/D 移动，空格、W 或上方向键跳跃。踩到怪物可以获得分数，碰到怪物或掉下平台会损失生命。</p>
+        <p>方向键或 A/D 移动，Shift、J 或 K 加速，空格、W 或上方向键跳跃；长按跳跃会跳得更高，但必须松开后才能再次起跳。踩怪得 200 分，金币每枚 100 分，红蘑菇变大，绿蘑菇加命。</p>
       </article>
       <article>
         <h2>地图规则</h2>
